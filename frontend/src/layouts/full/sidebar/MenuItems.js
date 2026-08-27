@@ -7,6 +7,10 @@ import {
   IconTypography,
   IconUserPlus,
   IconPlayerPlayFilled,
+  IconUserCheck,
+  IconChartBar,
+  IconEye,
+  IconDeviceDesktopAnalytics
 } from '@tabler/icons-react';
 
 import { uniqueId } from 'lodash';
@@ -60,6 +64,34 @@ const Menuitems = [
     title: 'Exam Logs',
     icon: IconUserPlus,
     href: '/exam-log',
+  },
+  {
+    id: uniqueId(),
+    title: 'User Approvals',
+    icon: IconUserCheck,
+    href: '/user-approvals',
+  },
+  {
+    navlabel: true,
+    subheader: 'Monitoring & Analytics',
+  },
+  {
+    id: uniqueId(),
+    title: 'Admin Dashboard',
+    icon: IconDeviceDesktopAnalytics,
+    href: '/admin-dashboard',
+  },
+  {
+    id: uniqueId(),
+    title: 'Live Monitoring',
+    icon: IconEye,
+    href: '/live-monitoring',
+  },
+  {
+    id: uniqueId(),
+    title: 'Analytics',
+    icon: IconChartBar,
+    href: '/analytics',
   },
   // {
   //   id: uniqueId(),

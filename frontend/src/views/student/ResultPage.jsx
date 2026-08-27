@@ -38,9 +38,11 @@ import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { docco } from 'react-syntax-highlighter/dist/esm/styles/hljs';
+import { useNavigate } from 'react-router-dom';
 
 const ResultPage = () => {
   const { userInfo } = useSelector((state) => state.auth);
+  const navigate = useNavigate();
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -189,7 +191,7 @@ const ResultPage = () => {
                   Total Submissions
                 </Typography>
                 <Typography variant="h3">
-                  {results.reduce((acc, curr) => acc + (curr.codingSubmissions?.length || 0), 0)}
+                  {results.length}
                 </Typography>
               </CardContent>
             </Card>
@@ -203,10 +205,9 @@ const ResultPage = () => {
                   <TableHead>
                     <TableRow>
                       <TableCell>Exam Name</TableCell>
-                      <TableCell>MCQ Score</TableCell>
-                      <TableCell>Coding Submissions</TableCell>
-                      <TableCell>Total Score</TableCell>
+                      <TableCell>Score</TableCell>
                       <TableCell>Submission Date</TableCell>
+                      <TableCell>Proctoring</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -219,22 +220,17 @@ const ResultPage = () => {
                             color={result.percentage >= 70 ? 'success' : 'warning'}
                           />
                         </TableCell>
-                        <TableCell>
-                          <Box display="flex" alignItems="center" gap={1}>
-                            <CheckCircle color="success" fontSize="small" />
-                          </Box>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" color="textSecondary">
-                            Total: {result.totalMarks}
-                          </Typography>
-                        </TableCell>
                         <TableCell>{new Date(result.createdAt).toLocaleDateString()}</TableCell>
                         <TableCell>
-                          {result.codingSubmissions?.length > 0 && (
-                            <IconButton onClick={() => handleViewCode(result)}>
-                              <Code />
-                            </IconButton>
+                          {result.sessionId && (
+                            <Button 
+                              size="small" 
+                              variant="outlined" 
+                              color="primary"
+                              onClick={() => navigate(`/exam/${result.examId}/report/${result.sessionId}`)}
+                            >
+                              Report
+                            </Button>
                           )}
                         </TableCell>
                       </TableRow>
@@ -322,10 +318,7 @@ const ResultPage = () => {
                 Total Submissions
               </Typography>
               <Typography variant="h3">
-                {filteredResults.reduce(
-                  (acc, curr) => acc + (curr.codingSubmissions?.length || 0),
-                  0,
-                )}
+                {filteredResults.length}
               </Typography>
             </CardContent>
           </Card>
@@ -367,16 +360,6 @@ const ResultPage = () => {
               />
             </Box>
 
-            <Tabs
-              value={selectedTab}
-              onChange={(e, newValue) => setSelectedTab(newValue)}
-              sx={{ mb: 2 }}
-            >
-              <Tab label="All Results" />
-              <Tab label="MCQ Results" />
-              <Tab label="Coding Results" />
-            </Tabs>
-
             <TableContainer component={Paper}>
               <Table>
                 <TableHead>
@@ -384,9 +367,7 @@ const ResultPage = () => {
                     <TableCell>Student Name</TableCell>
                     <TableCell>Email</TableCell>
                     <TableCell>Exam</TableCell>
-                    <TableCell>MCQ Score</TableCell>
-                    <TableCell>Coding Submissions</TableCell>
-                    <TableCell>Total Score</TableCell>
+                    <TableCell>Score</TableCell>
                     <TableCell>Submission Date</TableCell>
                     <TableCell>Actions</TableCell>
                   </TableRow>
@@ -405,16 +386,6 @@ const ResultPage = () => {
                           color={result.percentage >= 70 ? 'success' : 'warning'}
                         />
                       </TableCell>
-                      <TableCell>
-                        <Box display="flex" alignItems="center" gap={1}>
-                          <CheckCircle color="success" fontSize="small" />
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" color="textSecondary">
-                          Total: {result.totalMarks}
-                        </Typography>
-                      </TableCell>
                       <TableCell>{new Date(result.createdAt).toLocaleDateString()}</TableCell>
                       <TableCell>
                         <IconButton
@@ -423,6 +394,16 @@ const ResultPage = () => {
                         >
                           {result.showToStudent ? <Visibility /> : <VisibilityOff />}
                         </IconButton>
+                        {result.sessionId && (
+                          <Button 
+                            size="small" 
+                            variant="outlined" 
+                            sx={{ ml: 1 }}
+                            onClick={() => navigate(`/exam/${result.examId}/report/${result.sessionId}`)}
+                          >
+                            Report
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

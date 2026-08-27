@@ -13,7 +13,7 @@ export const apiSlice = createApi({
     },
   }),
 
-  tagTypes: ['User'],
+  tagTypes: ['User', 'PendingUsers'],
   // it like a prent to other api
   // it a build in builder
   endpoints: (builder) => ({}),

@@ -11,6 +11,10 @@ const resultSchema = mongoose.Schema(
       ref: "User",
       required: true,
     },
+    sessionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ExamSession",
+    },
     answers: {
       type: Map,
       of: String,

@@ -2,20 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { Grid, Box, Card, Typography, Stack } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
 import PageContainer from 'src/components/container/PageContainer';
-import Logo from 'src/layouts/full/shared/logo/Logo';
 import AuthRegister from './auth/AuthRegister';
 import { useFormik } from 'formik';
 import * as yup from 'yup';
 
 import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
-import { useRegisterMutation } from './../../slices/usersApiSlice';
-import { setCredentials } from './../../slices/authSlice';
+import { useRegisterMutation, useSendOtpMutation } from './../../slices/usersApiSlice';
 import Loader from './Loader';
 
 const userValidationSchema = yup.object({
   name: yup.string().min(2).max(25).required('Please enter your name'),
   email: yup.string('Enter your email').email('Enter a valid email').required('Email is required'),
+  otp: yup
+    .string()
+    .matches(/^[0-9]{6}$/, 'OTP must be exactly 6 digits')
+    .required('OTP is required'),
   password: yup
     .string('Enter your password')
     .min(6, 'Password should be of minimum 6 characters length')
@@ -26,19 +28,23 @@ const userValidationSchema = yup.object({
     .oneOf([yup.ref('password'), null], 'Password must match'),
   role: yup.string().oneOf(['student', 'teacher'], 'Invalid role').required('Role is required'),
 });
+
 const initialUserValues = {
   name: '',
   email: '',
+  otp: '',
   password: '',
   confirm_password: '',
   role: 'student',
 };
 
 const Register = () => {
+  const [otpSent, setOtpSent] = useState(false);
+
   const formik = useFormik({
     initialValues: initialUserValues,
     validationSchema: userValidationSchema,
-    onSubmit: (values, action) => {
+    onSubmit: (values) => {
       handleSubmit(values);
     },
   });
@@ -47,6 +53,7 @@ const Register = () => {
   const navigate = useNavigate();
 
   const [register, { isLoading }] = useRegisterMutation();
+  const [sendOtp, { isLoading: otpLoading }] = useSendOtpMutation();
 
   const { userInfo } = useSelector((state) => state.auth);
 
@@ -56,23 +63,39 @@ const Register = () => {
     }
   }, [navigate, userInfo]);
 
-  const submitHandler = async (e) => {
-    e.preventDefault();
+  // Send OTP handler
+  const handleSendOtp = async (email) => {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error('Please enter a valid email address first.');
+      return;
+    }
+    try {
+      await sendOtp({ email }).unwrap();
+      setOtpSent(true);
+      toast.success('OTP sent! Check your email (or server console in dev mode).');
+    } catch (err) {
+      toast.error(err?.data?.message || err.error || 'Failed to send OTP');
+    }
   };
 
-  const handleSubmit = async ({ name, email, password, confirm_password, role }) => {
+  // Registration submit handler
+  const handleSubmit = async ({ name, email, password, confirm_password, role, otp }) => {
     if (password !== confirm_password) {
       toast.error('Passwords do not match');
-    } else {
-      try {
-        const res = await register({ name, email, password, role }).unwrap();
-        dispatch(setCredentials({ ...res }));
-        formik.resetForm();
-
-        navigate('/auth/login');
-      } catch (err) {
-        toast.error(err?.data?.message || err.error);
-      }
+      return;
+    }
+    try {
+      const res = await register({ name, email, password, role, otp }).unwrap();
+      formik.resetForm();
+      setOtpSent(false);
+      toast.success(
+        res.message ||
+          'Registration submitted! Please wait for admin approval before logging in.',
+        { autoClose: 6000 },
+      );
+      navigate('/auth/login');
+    } catch (err) {
+      toast.error(err?.data?.message || err.error);
     }
   };
 
@@ -107,14 +130,14 @@ const Register = () => {
             <Card elevation={9} sx={{ p: 2, zIndex: 1, width: '100%', maxWidth: '500px' }}>
               <Box display="flex" alignItems="center" justifyContent="center">
                 <Typography
-                  variant="h4" // Choose a suitable variant (h1, h2, h3, h4, h5, h6, subtitle1, subtitle2, body1, body2, etc.)
-                  component="h1" // This will render an <h1> element
+                  variant="h4"
+                  component="h1"
                   style={{
                     fontWeight: 'bold',
-                    color: '#1976d2', // Primary color or any color you prefer
+                    color: '#1976d2',
                     margin: '20px 0',
                     textAlign: 'center',
-                    textShadow: '1px 1px 2px rgba(0, 0, 0, 0.3)', // Optional shadow effect
+                    textShadow: '1px 1px 2px rgba(0, 0, 0, 0.3)',
                   }}
                 >
                   AI_Evalu8
@@ -122,7 +145,9 @@ const Register = () => {
               </Box>
               <AuthRegister
                 formik={formik}
-                onSubmit={handleSubmit}
+                onSendOtp={handleSendOtp}
+                otpSent={otpSent}
+                otpLoading={otpLoading}
                 subtext={
                   <Typography variant="subtitle1" textAlign="center" color="textSecondary" mb={1}>
                     CONDUCT SECURE ONLINE EXAMS NOW

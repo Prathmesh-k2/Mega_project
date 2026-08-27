@@ -36,7 +36,15 @@ const ExamLogPage = Loadable(lazy(() => import('./../views/teacher/ExamLogPage')
 const AddQuestions = Loadable(lazy(() => import('./../views/teacher/AddQuestions')));
 const PrivateRoute = Loadable(lazy(() => import('src/views/authentication/PrivateRoute')));
 const TeacherRoute = Loadable(lazy(() => import('src/views/authentication/TeacherRoute')));
+const UserApprovalsPage = Loadable(lazy(() => import('src/views/teacher/UserApprovalsPage')));
 
+// New Teacher Dashboard & Proctoring Routes
+const AdminDashboard = Loadable(lazy(() => import('./../views/teacher/AdminDashboard')));
+const AnalyticsPage = Loadable(lazy(() => import('./../views/teacher/AnalyticsPage')));
+const LiveMonitoringPage = Loadable(lazy(() => import('./../views/teacher/LiveMonitoringPage')));
+
+// Common/Student Routes
+const ProctoringReport = Loadable(lazy(() => import('./../views/student/ProctoringReport')));
 const Router = createBrowserRouter(
   createRoutesFromElements(
     // Every router we create will now go in here as
@@ -56,6 +64,10 @@ const Router = createBrowserRouter(
             <Route path="/create-exam" exact={true} element={<CreateExamPage />} />
             <Route path="/add-questions" exact={true} element={<AddQuestions />} />
             <Route path="/exam-log" exact={true} element={<ExamLogPage />} />
+            <Route path="/user-approvals" exact={true} element={<UserApprovalsPage />} />
+            <Route path="/admin-dashboard" exact={true} element={<AdminDashboard />} />
+            <Route path="/analytics" exact={true} element={<AnalyticsPage />} />
+            <Route path="/live-monitoring" exact={true} element={<LiveMonitoringPage />} />
           </Route>
         </Route>
         <Route path="/" element={<ExamLayout />}>
@@ -63,6 +75,7 @@ const Router = createBrowserRouter(
           <Route path="exam/:examId/codedetails" exact={true} element={<CodeDetails />} />
           <Route path="exam/:examId/:testId" exact={true} element={<TestPage />} />
           <Route path="exam/:examId/code" exact={true} element={<Coder />} />
+          <Route path="exam/:examId/report/:sessionId" exact={true} element={<ProctoringReport />} />
         </Route>
       </Route>
       {/* User layout */}

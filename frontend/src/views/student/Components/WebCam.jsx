@@ -4,104 +4,31 @@ import * as cocossd from '@tensorflow-models/coco-ssd';
 import Webcam from 'react-webcam';
 import { drawRect } from './utilities';
 import { Box, Card } from '@mui/material';
-import swal from 'sweetalert';
-import { UploadClient } from '@uploadcare/upload-client';
 
-const client = new UploadClient({ publicKey: 'e69ab6e5db6d4a41760b' });
-
-export default function Home({ cheatingLog, updateCheatingLog }) {
-  const webcamRef = useRef(null);
+export default function WebCam({ onViolation, webcamRef }) {
+  const internalWebcamRef = useRef(null);
+  const actualWebcamRef = webcamRef || internalWebcamRef;
   const canvasRef = useRef(null);
   const [lastDetectionTime, setLastDetectionTime] = useState({});
-  const [screenshots, setScreenshots] = useState([]);
-
-  // Initialize screenshots array when component mounts
-  useEffect(() => {
-    if (cheatingLog && cheatingLog.screenshots) {
-      setScreenshots(cheatingLog.screenshots);
-    }
-  }, [cheatingLog]);
-
-  const captureScreenshotAndUpload = async (type) => {
-    const video = webcamRef.current?.video;
-
-    if (
-      !video ||
-      video.readyState !== 4 || // ensure video is ready
-      video.videoWidth === 0 ||
-      video.videoHeight === 0
-    ) {
-      console.warn('Video not ready for screenshot');
-      return null;
-    }
-
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    const context = canvas.getContext('2d');
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    const dataUrl = canvas.toDataURL('image/jpeg');
-    const file = dataURLtoFile(dataUrl, `cheating_${Date.now()}.jpg`);
-
-    try {
-      const result = await client.uploadFile(file);
-      console.log('✅ Uploaded to Uploadcare:', result.cdnUrl);
-      
-      const screenshot = {
-        url: result.cdnUrl,
-        type: type,
-        detectedAt: new Date()
-      };
-
-      // Update local screenshots state
-      setScreenshots(prev => [...prev, screenshot]);
-      
-      return screenshot;
-    } catch (error) {
-      console.error('❌ Upload failed:', error);
-      return null;
-    }
-  };
-
   const handleDetection = async (type) => {
     const now = Date.now();
     const lastTime = lastDetectionTime[type] || 0;
 
+    // Throttle events to avoid spamming
     if (now - lastTime >= 3000) {
       setLastDetectionTime((prev) => ({ ...prev, [type]: now }));
-
-      // Capture and upload screenshot
-      const screenshot = await captureScreenshotAndUpload(type);
       
-      if (screenshot) {
-        // Update cheating log with new count and screenshot
-        const updatedLog = {
-          ...cheatingLog,
-          [`${type}Count`]: (cheatingLog[`${type}Count`] || 0) + 1,
-          screenshots: [...(cheatingLog.screenshots || []), screenshot]
-        };
+      const mappedType = type === 'noFace' ? 'NO_FACE_DETECTED' :
+                         type === 'multipleFace' ? 'MULTIPLE_FACES' :
+                         type === 'cellPhone' ? 'CELL_PHONE_DETECTED' :
+                         type === 'prohibitedObject' ? 'PROHIBITED_OBJECT' : type;
 
-        console.log('Updating cheating log with:', updatedLog);
-        updateCheatingLog(updatedLog);
-      }
-
-      switch (type) {
-        case 'noFace':
-          swal('Face Not Visible', 'Warning Recorded', 'warning');
-          break;
-        case 'multipleFace':
-          swal('Multiple Faces Detected', 'Warning Recorded', 'warning');
-          break;
-        case 'cellPhone':
-          swal('Cell Phone Detected', 'Warning Recorded', 'warning');
-          break;
-        case 'prohibitedObject':
-          swal('Prohibited Object Detected', 'Warning Recorded', 'warning');
-          break;
-        default:
-          break;
+      if (onViolation) {
+        onViolation({
+          eventType: mappedType,
+          confidence: 1.0,
+          description: `${mappedType} detected by AI`,
+        });
       }
     }
   };
@@ -113,18 +40,17 @@ export default function Home({ cheatingLog, updateCheatingLog }) {
       setInterval(() => detect(net), 1000);
     } catch (error) {
       console.error('Error loading model:', error);
-      swal('Error', 'Failed to load AI model. Please refresh the page.', 'error');
     }
   };
 
   const detect = async (net) => {
-    if (webcamRef.current && webcamRef.current.video && webcamRef.current.video.readyState === 4) {
-      const video = webcamRef.current.video;
+    if (actualWebcamRef.current && actualWebcamRef.current.video && actualWebcamRef.current.video.readyState === 4) {
+      const video = actualWebcamRef.current.video;
       const videoWidth = video.videoWidth;
       const videoHeight = video.videoHeight;
 
-      webcamRef.current.video.width = videoWidth;
-      webcamRef.current.video.height = videoHeight;
+      actualWebcamRef.current.video.width = videoWidth;
+      actualWebcamRef.current.video.height = videoHeight;
       canvasRef.current.width = videoWidth;
       canvasRef.current.height = videoHeight;
 
@@ -166,7 +92,7 @@ export default function Home({ cheatingLog, updateCheatingLog }) {
     <Box>
       <Card variant="outlined" sx={{ position: 'relative', width: '100%', height: '100%' }}>
         <Webcam
-          ref={webcamRef}
+          ref={actualWebcamRef}
           audio={false}
           muted
           screenshotFormat="image/jpeg"
@@ -195,15 +121,4 @@ export default function Home({ cheatingLog, updateCheatingLog }) {
       </Card>
     </Box>
   );
-}
-
-// Helper to convert base64 to File
-function dataURLtoFile(dataUrl, fileName) {
-  const arr = dataUrl.split(',');
-  const mime = arr[0].match(/:(.*?);/)[1];
-  const bstr = atob(arr[1]);
-  let n = bstr.length;
-  const u8arr = new Uint8Array(n);
-  while (n--) u8arr[n] = bstr.charCodeAt(n);
-  return new File([u8arr], fileName, { type: mime });
 }

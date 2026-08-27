@@ -1,11 +1,13 @@
-import React from 'react';
-import { Box, Typography, Button, Select, MenuItem } from '@mui/material';
-
+import React, { useState } from 'react';
+import { Box, Typography, Button, Select, MenuItem, CircularProgress, InputAdornment } from '@mui/material';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import EmailIcon from '@mui/icons-material/Email';
 import CustomTextField from '../../../components/forms/theme-elements/CustomTextField';
 import { Stack } from '@mui/system';
 
-const AuthRegister = ({ formik, title, subtitle, subtext }) => {
-  const { values, errors, touched, handleBlur, handleChange, handleSubmit } = formik;
+const AuthRegister = ({ formik, title, subtitle, subtext, onSendOtp, otpSent, otpLoading }) => {
+  const { values, errors, touched, handleBlur, handleChange } = formik;
+
   return (
     <>
       {title ? (
@@ -18,31 +20,25 @@ const AuthRegister = ({ formik, title, subtitle, subtext }) => {
 
       <Box component="form">
         <Stack mb={1}>
-          <Typography
-            variant="subtitle1"
-            fontWeight={600}
-            component="label"
-            htmlFor="name"
-            mb="5px"
-          >
+          {/* Name */}
+          <Typography variant="subtitle1" fontWeight={600} component="label" htmlFor="name" mb="5px">
             Name
           </Typography>
           <CustomTextField
             id="name"
             name="name"
-            placeholder="Enter Your Name "
+            placeholder="Enter Your Name"
             variant="outlined"
             value={values.name}
             onChange={handleChange}
             onBlur={handleBlur}
             error={touched.name && errors.name ? true : false}
             helperText={touched.name && errors.name ? errors.name : null}
-            // onChange={onNameChange} // Call the callback function on change
             fullWidth
             required
-            //   size="small"
           />
 
+          {/* Email with Send OTP button */}
           <Typography
             variant="subtitle1"
             fontWeight={600}
@@ -53,22 +49,77 @@ const AuthRegister = ({ formik, title, subtitle, subtext }) => {
           >
             Email Address
           </Typography>
-          <CustomTextField
-            id="email"
-            name="email"
-            variant="outlined"
-            placeholder="Enter Your Email"
-            value={values.email}
-            onChange={handleChange}
-            onBlur={handleBlur}
-            error={touched.email && errors.email ? true : false}
-            helperText={touched.email && errors.email ? errors.email : null}
-            required
-            fullWidth
-            // onChange={onEmailChange} // Call the callback function on change
-            //   size="small"
-          />
+          <Box display="flex" gap={1} alignItems="flex-start">
+            <CustomTextField
+              id="email"
+              name="email"
+              variant="outlined"
+              placeholder="Enter Your Email"
+              value={values.email}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              error={touched.email && errors.email ? true : false}
+              helperText={touched.email && errors.email ? errors.email : null}
+              required
+              fullWidth
+              disabled={otpSent}
+              InputProps={
+                otpSent
+                  ? {
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <CheckCircleOutlineIcon color="success" />
+                        </InputAdornment>
+                      ),
+                    }
+                  : undefined
+              }
+            />
+            <Button
+              variant="outlined"
+              onClick={() => onSendOtp(values.email)}
+              disabled={otpSent || otpLoading || !values.email || !!errors.email}
+              sx={{ whiteSpace: 'nowrap', minWidth: '110px', height: '54px', mt: '0px' }}
+              startIcon={otpLoading ? <CircularProgress size={16} /> : <EmailIcon />}
+            >
+              {otpSent ? 'Sent ✓' : 'Send OTP'}
+            </Button>
+          </Box>
 
+          {/* OTP field — shown only after OTP is sent */}
+          {otpSent && (
+            <>
+              <Typography
+                variant="subtitle1"
+                fontWeight={600}
+                component="label"
+                htmlFor="otp"
+                mb="5px"
+                mt="10px"
+              >
+                Enter OTP{' '}
+                <Typography component="span" variant="caption" color="text.secondary">
+                  (sent to your email · expires in 5 min)
+                </Typography>
+              </Typography>
+              <CustomTextField
+                id="otp"
+                name="otp"
+                variant="outlined"
+                placeholder="6-digit OTP code"
+                value={values.otp}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                error={touched.otp && errors.otp ? true : false}
+                helperText={touched.otp && errors.otp ? errors.otp : null}
+                required
+                fullWidth
+                inputProps={{ maxLength: 6, style: { letterSpacing: '0.4em', fontSize: '1.2rem' } }}
+              />
+            </>
+          )}
+
+          {/* Password */}
           <Typography
             variant="subtitle1"
             fontWeight={600}
@@ -91,9 +142,9 @@ const AuthRegister = ({ formik, title, subtitle, subtext }) => {
             helperText={touched.password && errors.password ? errors.password : null}
             required
             fullWidth
-            // onChange={onPasswordChange} // Call the callback function on change
-            //   size="small"
           />
+
+          {/* Confirm Password */}
           <Typography
             variant="subtitle1"
             fontWeight={600}
@@ -119,9 +170,9 @@ const AuthRegister = ({ formik, title, subtitle, subtext }) => {
             }
             fullWidth
             required
-            // onChange={onConfirmPasswordChange} // Call the callback function on change
-            //   size="small"
           />
+
+          {/* Role */}
           <Typography
             variant="subtitle1"
             fontWeight={600}
@@ -141,28 +192,29 @@ const AuthRegister = ({ formik, title, subtitle, subtext }) => {
             onChange={handleChange}
             onBlur={handleBlur}
             error={!!(touched.role && errors.role)}
-            // value={userRole}
-            // onChange={onRoleChange} // Call the callback function on change
-            // inputProps={{ 'aria-label': 'Without label' }}
-            //   size="small"
           >
             <MenuItem value="student">Student</MenuItem>
             <MenuItem value="teacher">Teacher</MenuItem>
           </Select>
         </Stack>
+
         <Button
-          // size="small"
           color="primary"
           variant="contained"
           size="large"
           fullWidth
-          // component={Link}
-          // to="/auth/login"
-          onClick={handleSubmit}
-          // onClick={onSubmit} // Call the callback function on button click
+          disabled={!otpSent}
+          onClick={formik.handleSubmit}
+          sx={{ mt: 1 }}
         >
-          Sign Up
+          {otpSent ? 'Sign Up' : 'Verify Email to Sign Up'}
         </Button>
+
+        {!otpSent && (
+          <Typography variant="caption" color="text.secondary" textAlign="center" display="block" mt={1}>
+            Please enter your email and click "Send OTP" to verify before signing up.
+          </Typography>
+        )}
       </Box>
       {subtitle}
     </>

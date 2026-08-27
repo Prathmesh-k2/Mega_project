@@ -34,11 +34,11 @@ const UserAccount = () => {
   const { userInfo } = useSelector((state) => state.auth);
 
   const initialUserValues = {
-    name: userInfo.name || '',
-    email: userInfo.email || '',
+    name: userInfo?.name || '',
+    email: userInfo?.email || '',
     password: '',
     confirm_password: '',
-    role: userInfo.role || 'student',
+    role: userInfo?.role || 'student',
   };
 
   const formik = useFormik({
@@ -60,14 +60,14 @@ const UserAccount = () => {
       return;
     }
     try {
-      const payload = { _id: userInfo._id, name, email, role };
+      const payload = { _id: userInfo?._id, name, email, role };
       if (password) payload.password = password;
 
       const res = await updateProfile(payload).unwrap();
       // Merge with existing userInfo to preserve any fields the backend doesn't return
       dispatch(setCredentials({ ...userInfo, ...res }));
 
-      const roleChanged = role !== userInfo.role;
+      const roleChanged = role !== userInfo?.role;
       toast.success(
         roleChanged
           ? `Role changed to ${role}! Redirecting…`

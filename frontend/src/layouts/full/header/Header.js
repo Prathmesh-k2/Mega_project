@@ -73,7 +73,7 @@ const Header = (props) => {
         <Box flexGrow={1} />
         <Stack spacing={1} direction="row" alignItems="center">
           <Typography variant="contained" color="primary">
-            Hello, {_.startCase(userInfo.name)}
+            Hello, {_.startCase(userInfo?.name || 'User')}
           </Typography>
           <Profile />
         </Stack>
