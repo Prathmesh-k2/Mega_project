@@ -175,6 +175,8 @@ More features and improvements are in development and will be included in future
 To run this project locally, follow these steps:
 
 1. Clone this repository.
-2. Install the required dependencies in both the frontend and backend folders.
-3. Start the server using `npm start` in the backend folder.
-4. Start the React app using `npm start` in the frontend folder.
+2. Copy `.env.example` to `.env` in the project root and fill in `MONGO_URL`, `JWT_SECRET`, and optional SMTP settings.
+3. For evidence uploads during proctoring, create `frontend/.env` with `REACT_APP_UPLOADCARE_PUBLIC_KEY` (see `.env.example`).
+4. Install dependencies: `npm install` in the root, then `npm install` in `frontend`.
+5. Start both with `npm run dev` from the root, or start server (`npm run server`) and client (`npm run client`) separately.
+6. Seed demo users (optional): `node backend/scripts/seed.js` — teachers are created only via seed/DB, not public registration.

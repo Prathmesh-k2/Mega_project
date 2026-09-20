@@ -11,6 +11,7 @@ import {
   rejectUser,
 } from "../controllers/userController.js";
 import { protect } from "../middleware/authMiddleware.js";
+import { adminOnly } from "../middleware/adminMiddleware.js";
 
 const userRoutes = express.Router();
 
@@ -27,9 +28,9 @@ userRoutes
   .get(protect, getUserProfile)
   .put(protect, updateUserProfile);
 
-// Teacher/Admin — user approval routes (protected)
-userRoutes.get("/pending", protect, getPendingUsers);
-userRoutes.put("/approve/:id", protect, approveUser);
-userRoutes.delete("/reject/:id", protect, rejectUser);
+// Phase 1: teacher-only — students get 403 on approval APIs
+userRoutes.get("/pending", protect, adminOnly, getPendingUsers);
+userRoutes.put("/approve/:id", protect, adminOnly, approveUser);
+userRoutes.delete("/reject/:id", protect, adminOnly, rejectUser);
 
 export default userRoutes;

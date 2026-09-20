@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Box, Typography, Button, Select, MenuItem, CircularProgress, InputAdornment } from '@mui/material';
+import React from 'react';
+import { Box, Typography, Button, CircularProgress, InputAdornment } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import EmailIcon from '@mui/icons-material/Email';
 import CustomTextField from '../../../components/forms/theme-elements/CustomTextField';
@@ -171,31 +171,7 @@ const AuthRegister = ({ formik, title, subtitle, subtext, onSendOtp, otpSent, ot
             fullWidth
             required
           />
-
-          {/* Role */}
-          <Typography
-            variant="subtitle1"
-            fontWeight={600}
-            component="label"
-            htmlFor="role"
-            mb="5px"
-            mt="10px"
-          >
-            Role
-          </Typography>
-          <Select
-            id="role"
-            name="role"
-            required
-            displayEmpty
-            value={values.role}
-            onChange={handleChange}
-            onBlur={handleBlur}
-            error={!!(touched.role && errors.role)}
-          >
-            <MenuItem value="student">Student</MenuItem>
-            <MenuItem value="teacher">Teacher</MenuItem>
-          </Select>
+          {/* Phase 1: role dropdown removed — public signup is student-only */}
         </Stack>
 
         <Button

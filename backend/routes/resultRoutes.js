@@ -1,5 +1,6 @@
 import express from "express";
 import { protect } from "../middleware/authMiddleware.js";
+import { adminOnly } from "../middleware/adminMiddleware.js";
 import {
   saveResult,
   getResultsByExamId,
@@ -16,18 +17,16 @@ resultRoutes.use(protect);
 // Save result
 resultRoutes.post("/results", saveResult);
 
-// Get all results (for teachers)
-resultRoutes.get("/results/all", getAllResults);
-
-// Get results for a specific exam (for teachers)
-resultRoutes.get("/results/exam/:examId", getResultsByExamId);
+// Phase 1: teacher-only for all-results / by-exam / visibility toggle
+resultRoutes.get("/results/all", adminOnly, getAllResults);
+resultRoutes.get("/results/exam/:examId", adminOnly, getResultsByExamId);
 
 // Get results for current user
 resultRoutes.get("/results/user", getUserResults);
 
-// Toggle result visibility
 resultRoutes.put(
   "/results/:resultId/toggle-visibility",
+  adminOnly,
   toggleResultVisibility
 );
 

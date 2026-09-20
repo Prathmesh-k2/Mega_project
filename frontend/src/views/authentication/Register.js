@@ -26,7 +26,6 @@ const userValidationSchema = yup.object({
     .string()
     .required('Confirm Password is required')
     .oneOf([yup.ref('password'), null], 'Password must match'),
-  role: yup.string().oneOf(['student', 'teacher'], 'Invalid role').required('Role is required'),
 });
 
 const initialUserValues = {
@@ -35,7 +34,6 @@ const initialUserValues = {
   otp: '',
   password: '',
   confirm_password: '',
-  role: 'student',
 };
 
 const Register = () => {
@@ -78,14 +76,14 @@ const Register = () => {
     }
   };
 
-  // Registration submit handler
-  const handleSubmit = async ({ name, email, password, confirm_password, role, otp }) => {
+  // Phase 1: do not send role — backend always creates students
+  const handleSubmit = async ({ name, email, password, confirm_password, otp }) => {
     if (password !== confirm_password) {
       toast.error('Passwords do not match');
       return;
     }
     try {
-      const res = await register({ name, email, password, role, otp }).unwrap();
+      const res = await register({ name, email, password, otp }).unwrap();
       formik.resetForm();
       setOtpSent(false);
       toast.success(

@@ -1,8 +1,7 @@
-import React, { useEffect } from 'react';
-import { Grid, Box, Card, Typography, Stack } from '@mui/material';
+import React from 'react';
+import { Grid, Box, Card, Typography } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import PageContainer from 'src/components/container/PageContainer';
-import Logo from 'src/layouts/full/shared/logo/Logo';
 import { useFormik } from 'formik';
 import * as yup from 'yup';
 
@@ -10,7 +9,6 @@ import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import { useUpdateUserMutation } from '../../slices/usersApiSlice';
 import { setCredentials } from '../../slices/authSlice';
-import Loader from './Loader';
 import AuthUpdate from './auth/AuthUpdate';
 
 const userValidationSchema = yup.object({
@@ -27,7 +25,6 @@ const userValidationSchema = yup.object({
     .nullable()
     .optional()
     .oneOf([yup.ref('password'), null, ''], 'Passwords must match'),
-  role: yup.string().oneOf(['student', 'teacher'], 'Invalid role').required('Role is required'),
 });
 
 const UserAccount = () => {
@@ -38,13 +35,12 @@ const UserAccount = () => {
     email: userInfo?.email || '',
     password: '',
     confirm_password: '',
-    role: userInfo?.role || 'student',
   };
 
   const formik = useFormik({
     initialValues: initialUserValues,
     validationSchema: userValidationSchema,
-    onSubmit: (values, action) => {
+    onSubmit: (values) => {
       handleSubmit(values);
     },
   });
@@ -52,30 +48,22 @@ const UserAccount = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  const [updateProfile, { isLoading }] = useUpdateUserMutation();
+  const [updateProfile] = useUpdateUserMutation();
 
-  const handleSubmit = async ({ name, email, password, confirm_password, role }) => {
+  // Phase 1: role cannot be changed from profile (no role in payload)
+  const handleSubmit = async ({ name, email, password, confirm_password }) => {
     if (password && password !== confirm_password) {
       toast.error('Passwords do not match');
       return;
     }
     try {
-      const payload = { _id: userInfo?._id, name, email, role };
+      const payload = { _id: userInfo?._id, name, email };
       if (password) payload.password = password;
 
       const res = await updateProfile(payload).unwrap();
-      // Merge with existing userInfo to preserve any fields the backend doesn't return
       dispatch(setCredentials({ ...userInfo, ...res }));
-
-      const roleChanged = role !== userInfo?.role;
-      toast.success(
-        roleChanged
-          ? `Role changed to ${role}! Redirecting…`
-          : 'Profile updated successfully',
-      );
-
-      // Re-navigate to root so sidebar & route guards re-evaluate with new role
-      setTimeout(() => navigate('/'), roleChanged ? 1200 : 0);
+      toast.success('Profile updated successfully');
+      navigate('/');
     } catch (err) {
       toast.error(err?.data?.message || err.error);
     }

@@ -22,7 +22,17 @@ import axiosInstance from '../../../axios';
 import PROCTORING_CONFIG from '../../../config/proctoring';
 import { UploadClient } from '@uploadcare/upload-client';
 
-const uploadClient = new UploadClient({ publicKey: 'e69ab6e5db6d4a41760b' });
+// Phase 1: Uploadcare public key from env; skip upload if unset
+const uploadcarePublicKey = process.env.REACT_APP_UPLOADCARE_PUBLIC_KEY;
+const uploadClient = uploadcarePublicKey
+  ? new UploadClient({ publicKey: uploadcarePublicKey })
+  : null;
+
+if (!uploadcarePublicKey) {
+  console.warn(
+    '[ProctoringManager] REACT_APP_UPLOADCARE_PUBLIC_KEY is not set — evidence upload disabled.',
+  );
+}
 
 export default function ProctoringManager({
   sessionId,
@@ -133,6 +143,12 @@ export default function ProctoringManager({
         const u8arr = new Uint8Array(n);
         while (n--) u8arr[n] = bstr.charCodeAt(n);
         const file = new File([u8arr], `evidence_${eventType}_${Date.now()}.jpg`, { type: mime });
+
+        // Phase 1: no key configured — continue exam without evidence upload
+        if (!uploadClient) {
+          console.warn('[ProctoringManager] Skipping evidence upload — no Uploadcare public key.');
+          return;
+        }
 
         const result = await uploadClient.uploadFile(file);
 

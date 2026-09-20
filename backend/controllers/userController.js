@@ -105,12 +105,12 @@ const authUser = asyncHandler(async (req, res) => {
 
     generateToken(res, user._id);
 
+    // Phase 1: never return password hash (was previously stored in localStorage)
     res.status(201).json({
       _id: user._id,
       name: user.name,
       email: user.email,
       role: user.role,
-      password_encrypted: user.password,
       message: "User Successfully login with role: " + user.role,
     });
   } else {
@@ -123,7 +123,7 @@ const authUser = asyncHandler(async (req, res) => {
 // @route   POST /api/users  |  POST /api/users/register
 // @access  Public
 const registerUser = asyncHandler(async (req, res) => {
-  const { name, email, password, role, otp } = req.body;
+  const { name, email, password, otp } = req.body;
 
   // --- Validate OTP ---
   if (!otp) {
@@ -151,12 +151,12 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new Error("User Already Exists");
   }
 
-  // --- Create user (not yet approved) ---
+  // Phase 1: ignore client-sent role — public registration is always student
   const user = await User.create({
     name,
     email,
     password,
-    role,
+    role: "student",
     isVerified: true,
     isApproved: false, // must wait for teacher/admin approval
   });
@@ -180,10 +180,12 @@ const registerUser = asyncHandler(async (req, res) => {
 // @route   POST /api/users/logout
 // @access  Private
 const logoutUser = asyncHandler(async (req, res) => {
+  // Phase 1: match login cookie flags (secure only in production)
+  const isProd = process.env.NODE_ENV === "production";
   res.cookie("jwt", "", {
     httpOnly: true,
-    secure: true,
-    sameSite: "None",
+    secure: isProd,
+    sameSite: isProd ? "None" : "Lax",
     expires: new Date(0),
   });
   res.status(200).json({ message: " User logout User" });

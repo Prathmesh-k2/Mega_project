@@ -7,6 +7,7 @@ import {
   getCodingQuestionsByExamId,
 } from "../controllers/codingController.js";
 import { protect } from "../middleware/authMiddleware.js";
+import { adminOnly } from "../middleware/adminMiddleware.js";
 
 const router = express.Router();
 
@@ -17,9 +18,9 @@ router.use(protect);
 router.post("/submit", submitCodingAnswer);
 router.get("/questions/exam/:examId", getCodingQuestionsByExamId);
 
-// Teacher routes
-router.post("/question", createCodingQuestion);
-router.get("/questions", getCodingQuestions);
-router.get("/questions/:id", getCodingQuestion);
+// Phase 1: teacher-only — create/list coding questions
+router.post("/question", adminOnly, createCodingQuestion);
+router.get("/questions", adminOnly, getCodingQuestions);
+router.get("/questions/:id", adminOnly, getCodingQuestion);
 
 export default router;
