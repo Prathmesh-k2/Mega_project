@@ -21,6 +21,7 @@ import WebCam from './WebCam';
 import axiosInstance from '../../../axios';
 import PROCTORING_CONFIG from '../../../config/proctoring';
 import { UploadClient } from '@uploadcare/upload-client';
+import { toast } from 'react-toastify';
 
 // Phase 1: Uploadcare public key from env; skip upload if unset
 const uploadcarePublicKey = process.env.REACT_APP_UPLOADCARE_PUBLIC_KEY;
@@ -47,6 +48,7 @@ export default function ProctoringManager({
   const [classification, setClassification] = useState('SAFE');
   const [totalViolations, setTotalViolations] = useState(0);
   const [isTerminated, setIsTerminated] = useState(false);
+  const [violationCounts, setViolationCounts] = useState({});
   const evidenceCooldown = useRef({});
 
   // ── Handle any violation from any monitor ─────────────────────────
@@ -74,6 +76,16 @@ export default function ProctoringManager({
           setCurrentScore(data.currentScore || 0);
           setClassification(data.classification || 'SAFE');
           setTotalViolations((prev) => prev + 1);
+          setViolationCounts((prev) => ({
+             ...prev,
+             [violation.eventType]: (prev[violation.eventType] || 0) + 1
+          }));
+
+          // Trigger a loud UI popup!
+          toast.warning(`WARNING: ${violation.description || violation.eventType.replace(/_/g, ' ')}`, {
+             position: 'top-right',
+             autoClose: 5000,
+          });
 
           // Update legacy cheating log context for backward compatibility
           const typeMap = {
@@ -112,10 +124,24 @@ export default function ProctoringManager({
         }
       } catch (error) {
         console.error('[ProctoringManager] Failed to log violation:', error.message);
+        toast.error(`Backend Error Logging Violation: ${error.message}`);
       }
     },
     [sessionId, isActive, isTerminated, onTerminate, cheatingLog, updateCheatingLog, examId],
   );
+
+  // ── Listen for External Violations (Mobile Camera) ─────────────────
+  useEffect(() => {
+    const handleExternalViolation = (e) => {
+      if (e.detail && handleViolation) {
+        handleViolation(e.detail);
+      }
+    };
+    window.addEventListener('exam-violation', handleExternalViolation);
+    return () => {
+      window.removeEventListener('exam-violation', handleExternalViolation);
+    };
+  }, [handleViolation]);
 
   // ── Evidence Capture ──────────────────────────────────────────────
   const captureEvidence = useCallback(
@@ -208,11 +234,32 @@ export default function ProctoringManager({
             variant="outlined"
           />
           <Chip
-            label={`Violations: ${totalViolations}`}
+            label={`Total Violations: ${totalViolations}`}
             color={totalViolations > 5 ? 'error' : totalViolations > 0 ? 'warning' : 'default'}
             size="small"
           />
         </Stack>
+
+        {totalViolations > 0 && (
+          <Box sx={{ mt: 1, p: 1, border: '1px solid #ffcccc', borderRadius: 1, backgroundColor: '#fff5f5' }}>
+            <Typography variant="caption" fontWeight="bold" color="error">Malpractice Event Log:</Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 0.5, gap: 0.5 }}>
+               {Object.entries(violationCounts).map(([key, count]) => {
+                  if (count === 0) return null;
+                  return (
+                     <Chip 
+                        key={key} 
+                        label={`${key.replace(/_/g, ' ')}: ${count}`} 
+                        size="small" 
+                        color="error" 
+                        variant="outlined" 
+                        sx={{ fontSize: '0.7rem', height: '24px' }}
+                     />
+                  );
+               })}
+            </Stack>
+          </Box>
+        )}
 
         {isTerminated && (
           <Alert severity="error" sx={{ mt: 1 }}>

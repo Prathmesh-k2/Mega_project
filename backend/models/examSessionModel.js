@@ -104,10 +104,10 @@ const examSessionSchema = new mongoose.Schema(
   }
 );
 
-// Compound index: one active session per student per exam
+// Compound index: one attempt per student per exam (Prepared for Phase 2)
 examSessionSchema.index(
-  { examId: 1, studentId: 1, status: 1 },
-  { unique: false }
+  { examId: 1, studentId: 1 },
+  { unique: true }
 );
 
 const ExamSession = mongoose.model("ExamSession", examSessionSchema);

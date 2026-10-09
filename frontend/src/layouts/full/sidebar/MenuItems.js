@@ -55,12 +55,6 @@ const Menuitems = [
   },
   {
     id: uniqueId(),
-    title: 'Add Questions',
-    icon: IconLogin,
-    href: '/add-questions',
-  },
-  {
-    id: uniqueId(),
     title: 'Exam Logs',
     icon: IconUserPlus,
     href: '/exam-log',

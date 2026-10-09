@@ -6,6 +6,7 @@ import BlankCard from 'src/components/shared/BlankCard';
 import MultipleChoiceQuestion from './Components/MultipleChoiceQuestion';
 import NumberOfQuestions from './Components/NumberOfQuestions';
 import ProctoringManager from './Components/ProctoringManager';
+import ExamCameraSetup from './ExamCameraSetup';
 import { useGetExamsQuery, useGetQuestionsQuery } from '../../slices/examApiSlice';
 import { useStartSessionMutation, useSubmitSessionMutation } from 'src/slices/sessionApiSlice';
 import { useSelector } from 'react-redux';
@@ -29,6 +30,7 @@ const TestPage = () => {
   const [isMcqCompleted, setIsMcqCompleted] = useState(false);
 
   const [permissionsGranted, setPermissionsGranted] = useState(false);
+  const [isMobileSetupComplete, setIsMobileSetupComplete] = useState(false);
   const [permissionsError, setPermissionsError] = useState('');
 
   const requestPermissions = async () => {
@@ -50,9 +52,9 @@ const TestPage = () => {
 
       // Request both audio and video
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      // Stop tracks so they are free for the actual monitor components to use
-      stream.getTracks().forEach(track => track.stop());
-
+      // We no longer stop the tracks here. The <Webcam> component will properly manage the active stream.
+      // If we stop it, the webcam tag sometimes renders a black screen causing the AI to fail face detection.
+      
       setPermissionsGranted(true);
     } catch (err) {
       console.error('Permission error:', err);
@@ -74,7 +76,7 @@ const TestPage = () => {
   }, [userExamdata, examId]);
 
   useEffect(() => {
-    if (!examId || sessionId || !userInfo || !permissionsGranted) return;
+    if (!examId || sessionId || !userInfo || !permissionsGranted || !isMobileSetupComplete) return;
 
     const initSession = async () => {
       try {
@@ -197,18 +199,63 @@ const TestPage = () => {
                cursor: 'pointer'
              }}
           >
-            Grant Permissions & Start Test
+            Grant Permissions & Continue
           </button>
         </Box>
       </PageContainer>
     );
   }
 
+  // Pre-Exam Hardware Setup Phase
+  if (!isMobileSetupComplete) {
+    return (
+      <PageContainer title="Hardware Setup" description="Mobile Camera Setup">
+        <Box pt="3rem" display="flex" justifyContent="center">
+          <ExamCameraSetup 
+            sessionId={sessionId} 
+            isSetupComplete={false} 
+            onSetupSuccess={() => setIsMobileSetupComplete(true)} 
+          />
+        </Box>
+      </PageContainer>
+    );
+  }
+
+  // Active Exam Phase
   return (
     <PageContainer title="TestPage" description="This is TestPage">
       <Box pt="3rem">
         <Grid container spacing={3}>
-          <Grid item xs={12} md={7} lg={7}>
+          {/* LEFT: NAVIGATION & TIMER */}
+          <Grid item xs={12} md={2} lg={2}>
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <BlankCard>
+                  <Box
+                    maxHeight="600px"
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'start',
+                      overflowY: 'auto',
+                      height: '100%',
+                      p: 2
+                    }}
+                  >
+                    <NumberOfQuestions
+                      questionLength={questions.length}
+                      submitTest={handleTestSubmission}
+                      examDurationInSeconds={examDurationInSeconds}
+                    />
+                  </Box>
+                </BlankCard>
+              </Grid>
+            </Grid>
+          </Grid>
+
+          {/* CENTER: EXAM QUESTIONS */}
+          <Grid item xs={12} md={8} lg={8}>
             <BlankCard>
               <Box
                 width="100%"
@@ -232,38 +279,32 @@ const TestPage = () => {
               </Box>
             </BlankCard>
           </Grid>
-          <Grid item xs={12} md={5} lg={5}>
+
+          {/* RIGHT: CAMERA FEEDS (MOBILE & LAPTOP) */}
+          <Grid item xs={12} md={2} lg={2}>
             <Grid container spacing={3}>
               <Grid item xs={12}>
                 <BlankCard>
-                  <Box
-                    maxHeight="300px"
-                    sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'start',
-                      justifyContent: 'center',
-                      overflowY: 'auto',
-                      height: '100%',
-                    }}
-                  >
-                    <NumberOfQuestions
-                      questionLength={questions.length}
-                      submitTest={handleTestSubmission}
-                      examDurationInSeconds={examDurationInSeconds}
+                  <Box p={2}>
+                    <ExamCameraSetup 
+                      sessionId={sessionId} 
+                      isSetupComplete={true} 
+                      onSetupSuccess={() => {}} 
                     />
                   </Box>
                 </BlankCard>
               </Grid>
+              
               <Grid item xs={12}>
                 <BlankCard>
                   <Box
-                    sx={{ width: '100%', height: 400 }}
+                    sx={{ width: '100%', height: 'auto', minHeight: 200, p: 2 }}
                     display="flex"
-                    alignItems="start"
+                    alignItems="center"
                     justifyContent="center"
                     flexDirection="column"
                   >
+                    <Typography variant="caption" color="primary" gutterBottom align="center"><b>Laptop Camera Feed</b></Typography>
                     <ProctoringManager 
                        sessionId={sessionId} 
                        examId={examId}

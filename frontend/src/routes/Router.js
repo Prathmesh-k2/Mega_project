@@ -45,6 +45,9 @@ const LiveMonitoringPage = Loadable(lazy(() => import('./../views/teacher/LiveMo
 
 // Common/Student Routes
 const ProctoringReport = Loadable(lazy(() => import('./../views/student/ProctoringReport')));
+const ExamCameraSetup = Loadable(lazy(() => import('../views/student/ExamCameraSetup')));
+const MobileCamera = Loadable(lazy(() => import('../views/student/MobileCamera')));
+
 const Router = createBrowserRouter(
   createRoutesFromElements(
     // Every router we create will now go in here as
@@ -76,6 +79,7 @@ const Router = createBrowserRouter(
           <Route path="exam/:examId/:testId" exact={true} element={<TestPage />} />
           <Route path="exam/:examId/code" exact={true} element={<Coder />} />
           <Route path="exam/:examId/report/:sessionId" exact={true} element={<ProctoringReport />} />
+          <Route path="exam-camera/:sessionId" exact={true} element={<ExamCameraSetup />} />
         </Route>
       </Route>
       {/* User layout */}
@@ -89,6 +93,11 @@ const Router = createBrowserRouter(
         <Route path="/auth/register" element={<Register />} />
         <Route path="/auth/login" element={<Login />} />
         {/* <Route path="*" element={<Navigate to="/auth/404" />} /> */}
+      </Route>
+
+      {/* Standalone Mobile Camera layout */}
+      <Route element={<BlankLayout />}>
+        <Route path="/mobile-camera/:token" element={<MobileCamera />} />
       </Route>
     </>,
   ),

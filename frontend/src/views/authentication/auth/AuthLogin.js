@@ -12,7 +12,7 @@ import { Link } from 'react-router-dom';
 
 import CustomTextField from '../../../components/forms/theme-elements/CustomTextField';
 
-const AuthLogin = ({ formik, title, subtitle, subtext }) => {
+const AuthLogin = ({ formik, title, subtitle, subtext, onGuestLogin, isGuestLoading }) => {
   const { values, errors, touched, handleBlur, handleChange, handleSubmit } = formik;
   return (
     <>
@@ -101,6 +101,28 @@ const AuthLogin = ({ formik, title, subtitle, subtext }) => {
         >
           Sign In
         </Button>
+        <Stack direction="row" spacing={2} mt={2}>
+          <Button
+            color="secondary"
+            variant="outlined"
+            size="medium"
+            fullWidth
+            onClick={() => onGuestLogin('student')}
+            disabled={isGuestLoading}
+          >
+            Demo Student
+          </Button>
+          <Button
+            color="success"
+            variant="outlined"
+            size="medium"
+            fullWidth
+            onClick={() => onGuestLogin('admin')}
+            disabled={isGuestLoading}
+          >
+            Demo Admin
+          </Button>
+        </Stack>
       </Box>
       {subtitle}
     </>

@@ -9,6 +9,7 @@ import {
   getPendingUsers,
   approveUser,
   rejectUser,
+  guestLogin,
 } from "../controllers/userController.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { adminOnly } from "../middleware/adminMiddleware.js";
@@ -18,6 +19,7 @@ const userRoutes = express.Router();
 // Public routes
 userRoutes.post("/send-otp", sendOtp);
 userRoutes.post("/auth", authUser);
+userRoutes.post("/guest", guestLogin);
 userRoutes.post("/logout", logoutUser);
 userRoutes.post("/", registerUser);
 userRoutes.post("/register", registerUser);

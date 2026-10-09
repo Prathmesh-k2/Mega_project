@@ -13,6 +13,14 @@ export const userApiSlice = apiSlice.injectEndpoints({
         body: data,
       }),
     }),
+    // Guest Login Api
+    guestLogin: builder.mutation({
+      query: (data) => ({
+        url: `${USERS_URL}/guest`,
+        method: 'POST',
+        body: data,
+      }),
+    }),
     // Register Mutation Api
     register: builder.mutation({
       query: (data) => ({
@@ -73,6 +81,7 @@ export const userApiSlice = apiSlice.injectEndpoints({
 
 export const {
   useLoginMutation,
+  useGuestLoginMutation,
   useLogoutMutation,
   useRegisterMutation,
   useUpdateUserMutation,

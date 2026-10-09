@@ -119,6 +119,42 @@ const authUser = asyncHandler(async (req, res) => {
   }
 });
 
+// @desc    Guest login to bypass authentication
+// @route   POST /api/users/guest
+// @access  Public
+const guestLogin = asyncHandler(async (req, res) => {
+  const { role } = req.body;
+  if (!role || (role !== 'student' && role !== 'admin')) {
+    res.status(400);
+    throw new Error('Valid role (student or admin) is required for guest login');
+  }
+
+  const email = role === 'admin' ? 'guest_admin@demo.com' : 'guest_student@demo.com';
+  let user = await User.findOne({ email });
+
+  // Insert data into database if it doesn't exist
+  if (!user) {
+    user = await User.create({
+      name: role === 'admin' ? 'Demo Admin' : 'Demo Student',
+      email: email,
+      password: 'GuestPassword123!', // strong dummy password
+      role: role,
+      isVerified: true,
+      isApproved: true, 
+    });
+  }
+
+  generateToken(res, user._id);
+
+  res.status(200).json({
+    _id: user._id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    message: "Guest Login Successful with role: " + user.role,
+  });
+});
+
 // @desc    Register a new user (OTP verified)
 // @route   POST /api/users  |  POST /api/users/register
 // @access  Public
@@ -272,6 +308,7 @@ const rejectUser = asyncHandler(async (req, res) => {
 
 export {
   authUser,
+  guestLogin,
   registerUser,
   logoutUser,
   getUserProfile,

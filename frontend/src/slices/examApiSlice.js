@@ -45,6 +45,40 @@ export const examApiSlice = apiSlice.injectEndpoints({
         credentials: 'include',
       }),
     }),
+    updateExam: builder.mutation({
+      query: ({ examId, data }) => ({
+        url: `${EXAMS_URL}/exam/${examId}`,
+        method: 'PUT',
+        body: data,
+      }),
+    }),
+    publishExam: builder.mutation({
+      query: (examId) => ({
+        url: `${EXAMS_URL}/exam/${examId}/publish`,
+        method: 'POST',
+        credentials: 'include',
+      }),
+    }),
+    generateAiQuestions: builder.mutation({
+      query: ({ examId, data }) => ({
+        url: `${EXAMS_URL}/exam/${examId}/ai-generate`,
+        method: 'POST',
+        body: data,
+      }),
+    }),
+    updateQuestion: builder.mutation({
+      query: ({ questionId, data }) => ({
+        url: `${EXAMS_URL}/questions/${questionId}`,
+        method: 'PUT',
+        body: data,
+      }),
+    }),
+    deleteQuestion: builder.mutation({
+      query: (questionId) => ({
+        url: `${EXAMS_URL}/questions/${questionId}`,
+        method: 'DELETE',
+      }),
+    }),
   }),
 });
 
@@ -55,4 +89,9 @@ export const {
   useGetQuestionsQuery,
   useCreateQuestionMutation,
   useDeleteExamMutation,
+  useUpdateExamMutation,
+  usePublishExamMutation,
+  useGenerateAiQuestionsMutation,
+  useUpdateQuestionMutation,
+  useDeleteQuestionMutation,
 } = examApiSlice;

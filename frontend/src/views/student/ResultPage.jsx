@@ -39,6 +39,7 @@ import { toast } from 'react-toastify';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { docco } from 'react-syntax-highlighter/dist/esm/styles/hljs';
 import { useNavigate } from 'react-router-dom';
+import Chart from 'react-apexcharts';
 
 const ResultPage = () => {
   const { userInfo } = useSelector((state) => state.auth);
@@ -154,6 +155,20 @@ const ResultPage = () => {
 
   // Student View
   if (userInfo?.role === 'student') {
+    const sortedResults = [...results].sort((a,b) => b.percentage - a.percentage);
+    const highestExam = sortedResults.length > 0 ? sortedResults[0] : null;
+    const weakestExam = sortedResults.length > 0 ? sortedResults[sortedResults.length - 1] : null;
+
+    const chartOptions = {
+      chart: { type: 'bar', toolbar: { show: false } },
+      xaxis: { categories: results.map(r => r.examId?.examName || 'Exam') },
+      colors: ['#5D87FF'],
+      plotOptions: { bar: { borderRadius: 4, dataLabels: { position: 'top' } } },
+      dataLabels: { enabled: true, formatter: val => val + '%' },
+      yaxis: { max: 100 }
+    };
+    const chartSeries = [{ name: 'Score', data: results.map(r => Number(r.percentage.toFixed(1))) }];
+
     return (
       <PageContainer title="My Exam Results" description="View your exam results">
         <Grid container spacing={3}>
@@ -161,40 +176,39 @@ const ResultPage = () => {
           <Grid item xs={12} md={4}>
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Total Exams Taken
-                </Typography>
+                <Typography variant="h6" gutterBottom>Total Exams Taken</Typography>
                 <Typography variant="h3">{results.length}</Typography>
               </CardContent>
             </Card>
           </Grid>
           <Grid item xs={12} md={4}>
-            <Card>
+            <Card sx={{ bgcolor: 'success.light', color: 'success.dark' }}>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Average Score
-                </Typography>
-                <Typography variant="h3">
-                  {results.length > 0
-                    ? `${(
-                        results.reduce((acc, curr) => acc + curr.percentage, 0) / results.length
-                      ).toFixed(1)}%`
-                    : '0%'}
-                </Typography>
+                <Typography variant="h6" gutterBottom>Highest Score (Strong Concept)</Typography>
+                <Typography variant="h4">{highestExam ? highestExam.examId?.examName : 'N/A'}</Typography>
+                <Typography variant="subtitle1">{highestExam ? `${highestExam.percentage.toFixed(1)}%` : ''}</Typography>
               </CardContent>
             </Card>
           </Grid>
           <Grid item xs={12} md={4}>
-            <Card>
+            <Card sx={{ bgcolor: 'error.light', color: 'error.dark' }}>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Total Submissions
-                </Typography>
-                <Typography variant="h3">
-                  {results.length}
-                </Typography>
+                <Typography variant="h6" gutterBottom>Lowest Score (Weak Concept)</Typography>
+                <Typography variant="h4">{weakestExam ? weakestExam.examId?.examName : 'N/A'}</Typography>
+                <Typography variant="subtitle1">{weakestExam ? `${weakestExam.percentage.toFixed(1)}%` : ''}</Typography>
               </CardContent>
             </Card>
+          </Grid>
+
+          {/* Graphical Analysis */}
+          <Grid item xs={12}>
+            <DashboardCard title="Performance Analytics">
+               {results.length > 0 ? (
+                  <Chart options={chartOptions} series={chartSeries} type="bar" height={300} />
+               ) : (
+                  <Typography variant="body1">No tests taken yet.</Typography>
+               )}
+            </DashboardCard>
           </Grid>
 
           {/* Results Table */}

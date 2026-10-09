@@ -6,6 +6,9 @@ import cookieParser from "cookie-parser";
 import path from "path";
 import { fileURLToPath } from "url";
 import cors from "cors";
+import { createServer } from "http";
+import { Server } from "socket.io";
+import { randomUUID } from "crypto";
 
 // Route imports
 import userRoutes from "./routes/userRoutes.js";
@@ -32,10 +35,7 @@ app.use(cookieParser());
 // ── CORS ──────────────────────────────────────────────────────────────────────
 app.use(
   cors({
-    origin: [
-      "http://localhost:3000",
-      "http://localhost:5000",
-    ],
+    origin: "*",
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -84,8 +84,99 @@ if (process.env.NODE_ENV === "production") {
 app.use(notFound);
 app.use(errorHandler);
 
+// ── WebRTC Signaling & Socket.IO ──────────────────────────────────────────────
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
+
+const sessions = new Map();
+
+io.on("connection", (socket) => {
+  console.log("Socket Connected:", socket.id);
+
+  // Laptop requests a QR token for its exam session.
+  socket.on("create-mobile-token", ({ sessionId }) => {
+    const token = randomUUID();
+    sessions.set(token, {
+      sessionId: sessionId || "pending",
+      laptopSocketId: socket.id,
+      mobileSocketId: null,
+      expiresAt: Date.now() + 5 * 60 * 1000
+    });
+    socket.emit("mobile-token-created", { token });
+  });
+
+  // Phone scans the QR and joins the matching session.
+  socket.on("join-mobile-camera", ({ token }) => {
+    const session = sessions.get(token);
+
+    if (!session || Date.now() > session.expiresAt) {
+      socket.emit("camera-error", "Invalid or expired QR code.");
+      return;
+    }
+
+    if (session.mobileSocketId) {
+      socket.emit("camera-error", "A mobile camera is already connected.");
+      return;
+    }
+
+    session.mobileSocketId = socket.id;
+
+    socket.emit("mobile-camera-joined", {
+      sessionId: session.sessionId
+    });
+
+    io.to(session.laptopSocketId).emit("mobile-camera-connected", {
+      sessionId: session.sessionId
+    });
+  });
+
+  // Mobile sends WebRTC offer to laptop.
+  socket.on("webrtc-offer", ({ token, offer }) => {
+    const s = sessions.get(token);
+    if (s && socket.id === s.mobileSocketId) {
+      io.to(s.laptopSocketId).emit("webrtc-offer", { token, offer });
+    }
+  });
+
+  // Laptop sends WebRTC answer to mobile.
+  socket.on("webrtc-answer", ({ token, answer }) => {
+    const s = sessions.get(token);
+    if (s && socket.id === s.laptopSocketId && s.mobileSocketId) {
+      io.to(s.mobileSocketId).emit("webrtc-answer", { token, answer });
+    }
+  });
+
+  // Forward ICE candidates to establish the media connection.
+  socket.on("webrtc-ice", ({ token, candidate }) => {
+    const s = sessions.get(token);
+    if (!s) return;
+
+    if (socket.id === s.laptopSocketId && s.mobileSocketId) {
+      io.to(s.mobileSocketId).emit("webrtc-ice", { candidate });
+    } else if (socket.id === s.mobileSocketId) {
+      io.to(s.laptopSocketId).emit("webrtc-ice", { candidate });
+    }
+  });
+
+  socket.on("disconnect", () => {
+    for (const [token, s] of sessions) {
+      if (s.laptopSocketId === socket.id) {
+        sessions.delete(token);
+      } else if (s.mobileSocketId === socket.id) {
+        s.mobileSocketId = null;
+        io.to(s.laptopSocketId).emit("mobile-camera-disconnected");
+      }
+    }
+  });
+});
+
 // ── Start Server ──────────────────────────────────────────────────────────────
-app.listen(port, () => {
-  console.log(`\n🚀 AI_Evalu8 server running on http://localhost:${port}`);
+httpServer.listen(port, "0.0.0.0", () => {
+  console.log(`\n🚀 AI_Evalu8 server + sockets running on http://0.0.0.0:${port}`);
   console.log(`   Environment: ${process.env.NODE_ENV || "development"}\n`);
 });

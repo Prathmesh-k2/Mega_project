@@ -18,7 +18,7 @@ const SidebarItems = () => {
           // Check if the user is a student and if the item should be hidden
           if (
             userInfo?.role === 'student' &&
-            ['Create Exam', 'Add Questions', 'Exam Logs', 'User Approvals'].includes(item.title)
+            ['Create Exam', 'Exam Logs', 'User Approvals'].includes(item.title)
           ) {
             return null; // Don't render this menu item for students
           }

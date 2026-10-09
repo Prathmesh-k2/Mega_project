@@ -1,66 +1,69 @@
 import React from 'react';
-import {
-  Box,
-  Typography,
-  Button,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Stack,
-} from '@mui/material';
+import { Box, Typography, Button, Stack } from '@mui/material';
 import CustomTextField from '../../../components/forms/theme-elements/CustomTextField';
-import CodingQuestionForm from './CodingQuestionForm';
 
-const CreateExam = ({ formik, title, subtitle, subtext }) => {
-  const { values, errors, touched, handleBlur, handleChange, handleSubmit } = formik;
+const ExamForm = ({ formik, title, onSubmitForm, isSaving }) => {
+  const { values, errors, touched, handleChange } = formik;
 
   return (
-    <>
-      {title ? (
-        <Typography fontWeight="700" variant="h2" mb={1}>
+    <Box component="form" onSubmit={onSubmitForm}>
+      {title && (
+        <Typography variant="h3" textAlign="center" color="textPrimary" mb={3}>
           {title}
         </Typography>
-      ) : null}
+      )}
 
-      {subtext}
+      <Stack spacing={3} mb={3}>
+        <CustomTextField
+          id="examName"
+          name="examName"
+          label="Exam Name"
+          fullWidth
+          value={values.examName}
+          onChange={handleChange}
+          error={touched.examName && Boolean(errors.examName)}
+          helperText={touched.examName && errors.examName}
+        />
+        
+        <CustomTextField
+          id="subject"
+          name="subject"
+          label="Subject"
+          fullWidth
+          value={values.subject}
+          onChange={handleChange}
+          error={touched.subject && Boolean(errors.subject)}
+          helperText={touched.subject && errors.subject}
+        />
 
-      <Box component="form">
-        <Stack mb={3}>
-          <CustomTextField
-            id="examName"
-            name="examName"
-            label="Exam Name"
-            variant="outlined"
-            fullWidth
-            value={values.examName}
-            onChange={handleChange}
-            error={touched.examName && Boolean(errors.examName)}
-            helperText={touched.examName && errors.examName}
-          />
-        </Stack>
+        <CustomTextField
+          id="description"
+          name="description"
+          label="Description (Optional)"
+          fullWidth
+          multiline
+          rows={2}
+          value={values.description}
+          onChange={handleChange}
+        />
 
-        <Stack mb={3}>
+        <Stack direction="row" spacing={3}>
           <CustomTextField
             id="totalQuestions"
             name="totalQuestions"
-            label="Total Number of Questions"
-            variant="outlined"
+            label="Total Questions"
+            type="number"
             fullWidth
             value={values.totalQuestions}
             onChange={handleChange}
             error={touched.totalQuestions && Boolean(errors.totalQuestions)}
             helperText={touched.totalQuestions && errors.totalQuestions}
           />
-        </Stack>
-
-        <Stack mb={3}>
           <CustomTextField
             id="duration"
             name="duration"
-            label="Exam Duration (minutes)"
-            variant="outlined"
+            label="Duration (minutes)"
+            type="number"
             fullWidth
             value={values.duration}
             onChange={handleChange}
@@ -69,60 +72,46 @@ const CreateExam = ({ formik, title, subtitle, subtext }) => {
           />
         </Stack>
 
-        <Stack mb={3}>
+        <Stack direction="row" spacing={3}>
           <CustomTextField
             id="liveDate"
             name="liveDate"
-            label="Live Date and Time"
+            label="Start Date and Time"
             type="datetime-local"
-            variant="outlined"
             fullWidth
             value={values.liveDate}
             onChange={handleChange}
             error={touched.liveDate && Boolean(errors.liveDate)}
             helperText={touched.liveDate && errors.liveDate}
-            InputLabelProps={{
-              shrink: true,
-            }}
+            InputLabelProps={{ shrink: true }}
           />
-        </Stack>
-
-        <Stack mb={3}>
           <CustomTextField
             id="deadDate"
             name="deadDate"
-            label="Dead Date and Time"
+            label="End Date and Time"
             type="datetime-local"
-            variant="outlined"
             fullWidth
             value={values.deadDate}
             onChange={handleChange}
             error={touched.deadDate && Boolean(errors.deadDate)}
             helperText={touched.deadDate && errors.deadDate}
-            InputLabelProps={{
-              shrink: true,
-            }}
+            InputLabelProps={{ shrink: true }}
           />
         </Stack>
+      </Stack>
 
-        <CodingQuestionForm formik={formik} />
-
-        <Button
-          color="primary"
-          variant="contained"
-          size="large"
-          fullWidth
-          type="submit"
-          disabled={formik.isSubmitting}
-          onClick={handleSubmit}
-        >
-          Create Exam
-        </Button>
-      </Box>
-
-      {subtitle}
-    </>
+      <Button
+        color="primary"
+        variant="contained"
+        size="large"
+        fullWidth
+        type="submit"
+        disabled={formik.isSubmitting || isSaving}
+      >
+        {isSaving ? "Saving..." : "Save Draft and Continue"}
+      </Button>
+    </Box>
   );
 };
 
-export default CreateExam;
+export default ExamForm;

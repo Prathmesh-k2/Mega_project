@@ -7,9 +7,30 @@ const examSchema = mongoose.Schema(
       type: String,
       required: true,
     },
+    subject: {
+      type: String,
+      default: "",
+    },
+    description: {
+      type: String,
+      default: "",
+    },
+    creationMode: {
+      type: String,
+      enum: ["MANUAL", "AI"],
+      default: "MANUAL",
+    },
+    examType: {
+      type: String,
+      default: "MCQ", // "MCQ" for this phase
+    },
     totalQuestions: {
       type: Number,
       required: true,
+    },
+    totalMarks: {
+      type: Number,
+      default: 0,
     },
     duration: {
       type: Number,
@@ -22,6 +43,22 @@ const examSchema = mongoose.Schema(
     deadDate: {
       type: Date,
       required: true,
+    },
+    status: {
+      type: String,
+      enum: ["DRAFT", "PUBLISHED", "LIVE", "CLOSED"],
+      default: "DRAFT",
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    settings: {
+      shuffleQuestions: { type: Boolean, default: false },
+      shuffleOptions: { type: Boolean, default: false },
+      negativeMarking: { type: Boolean, default: false },
+      negativeMarks: { type: Number, default: 0 },
+      oneAttempt: { type: Boolean, default: true },
     },
     // Define examId field with UUID generation
     examId: {

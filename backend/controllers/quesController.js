@@ -16,7 +16,7 @@ const getQuestionsByExamId = asyncHandler(async (req, res) => {
 });
 
 const createQuestion = asyncHandler(async (req, res) => {
-  const { question, options, examId } = req.body;
+  const { question, options, ansmarks, source, difficulty, topic, examId } = req.body;
 
   if (!examId) {
     return res.status(400).json({ error: "examId is missing or invalid" });
@@ -25,6 +25,10 @@ const createQuestion = asyncHandler(async (req, res) => {
   const newQuestion = new Question({
     question,
     options,
+    ansmarks: ansmarks || 1,
+    source: source || "MANUAL",
+    difficulty: difficulty || "",
+    topic: topic || "",
     examId,
   });
 
@@ -38,4 +42,30 @@ const createQuestion = asyncHandler(async (req, res) => {
   }
 });
 
-export { getQuestionsByExamId, createQuestion };
+const updateQuestion = asyncHandler(async (req, res) => {
+  const { questionId } = req.params;
+  const questionRecord = await Question.findById(questionId);
+
+  if (!questionRecord) {
+    res.status(404);
+    throw new Error("Question not found");
+  }
+
+  Object.assign(questionRecord, req.body);
+  const updatedQuestion = await questionRecord.save();
+  res.status(200).json(updatedQuestion);
+});
+
+const deleteQuestion = asyncHandler(async (req, res) => {
+  const { questionId } = req.params;
+  const questionRecord = await Question.findByIdAndDelete(questionId);
+
+  if (!questionRecord) {
+    res.status(404);
+    throw new Error("Question not found");
+  }
+
+  res.status(200).json({ message: "Question deleted successfully" });
+});
+
+export { getQuestionsByExamId, createQuestion, updateQuestion, deleteQuestion };

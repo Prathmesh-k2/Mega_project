@@ -11,7 +11,7 @@ import * as yup from 'yup';
 
 import { useDispatch, useSelector } from 'react-redux';
 
-import { useLoginMutation } from './../../slices/usersApiSlice';
+import { useLoginMutation, useGuestLoginMutation } from './../../slices/usersApiSlice';
 
 import { setCredentials } from './../../slices/authSlice';
 import { toast } from 'react-toastify';
@@ -42,6 +42,7 @@ const Login = () => {
   const dispatch = useDispatch();
 
   const [login, { isLoading }] = useLoginMutation();
+  const [guestLogin, { isLoading: isGuestLoading }] = useGuestLoginMutation();
 
   const { userInfo } = useSelector((state) => state.auth);
 
@@ -54,6 +55,25 @@ const Login = () => {
   const handleSubmit = async ({ email, password }) => {
     try {
       const res = await login({ email, password }).unwrap();
+
+      dispatch(setCredentials({ ...res }));
+      formik.resetForm();
+
+      const redirectLocation = JSON.parse(localStorage.getItem('redirectLocation'));
+      if (redirectLocation) {
+        localStorage.removeItem('redirectLocation');
+        navigate(redirectLocation.pathname);
+      } else {
+        navigate('/');
+      }
+    } catch (err) {
+      toast.error(err?.data?.message || err.error);
+    }
+  };
+
+  const handleGuestLogin = async (role) => {
+    try {
+      const res = await guestLogin({ role }).unwrap();
 
       dispatch(setCredentials({ ...res }));
       formik.resetForm();
@@ -116,6 +136,8 @@ const Login = () => {
               </Box>
               <AuthLogin
                 formik={formik}
+                onGuestLogin={handleGuestLogin}
+                isGuestLoading={isGuestLoading}
                 subtext={
                   <Typography variant="subtitle1" textAlign="center" color="textSecondary" mb={1}>
                     CONDUCT SECURE ONLINE EXAMS NOW
@@ -137,7 +159,7 @@ const Login = () => {
                     >
                       Create an account
                     </Typography>
-                    {isLoading && <Loader />}
+                    {(isLoading || isGuestLoading) && <Loader />}
                   </Stack>
                 }
               />

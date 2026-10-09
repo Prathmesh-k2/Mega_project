@@ -23,6 +23,19 @@ const questionSchema = mongoose.Schema(
       required: false,
       default: 0,
     },
+    source: {
+      type: String,
+      enum: ["MANUAL", "AI"],
+      default: "MANUAL",
+    },
+    difficulty: {
+      type: String,
+      default: "",
+    },
+    topic: {
+      type: String,
+      default: "",
+    },
     examId: {
       type: String, // Use the same data type (String) as in the exam model
       required: true,
