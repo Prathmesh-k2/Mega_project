@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import { QRCodeSVG } from "qrcode.react";
 import { Box, Button, Typography, Card, CircularProgress } from "@mui/material";
-import useCheatDetection from "../../hooks/useCheatDetection";
+import useTFJSDetection from "../../hooks/useTFJSDetection";
 
 const SERVER_URL = window.location.origin;
 
@@ -22,16 +22,17 @@ let globalContext = {
   notify: () => {}
 };
 
-export default function ExamCameraSetup({ sessionId, isSetupComplete, onSetupSuccess, onViolation }) {
+export default function ExamCameraSetup({ sessionId, isSetupComplete, onSetupSuccess, onViolation, mobileVideoRef }) {
   const [, forceRender] = useState({});
-  const videoRef = useRef(null);
+  const internalVideoRef = useRef(null);
+  const videoRef = mobileVideoRef || internalVideoRef;
 
   // Default violation handler maps to our custom DOM event if not provided
   const handleViolation = onViolation || ((v) => { window.dispatchEvent(new CustomEvent('exam-violation', { detail: v })); });
 
   // Initialize unified 1 FPS background AI cheating detection for Mobile Feeds
   // We only run this detection during the active exam phase (`isSetupComplete === true`)
-  useCheatDetection(videoRef, handleViolation, isSetupComplete && globalContext.mobileConnected, 'Mobile Desk Camera');
+  useTFJSDetection(videoRef, handleViolation, isSetupComplete && globalContext.mobileConnected, 'Mobile Desk Camera');
 
   useEffect(() => {
     // Bind the global updater to this specific mounted instance

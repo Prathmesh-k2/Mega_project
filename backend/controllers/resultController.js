@@ -70,11 +70,13 @@ const getResultsByExamId = asyncHandler(async (req, res) => {
 
   // Combine MCQ and coding results
   const combinedResults = results.map((result) => {
+    const resultUserId = result.userId?._id?.toString();
     const studentCodingSubmissions = codingQuestions
       .filter(
         (q) =>
           q.submittedAnswer &&
-          q.submittedAnswer.userId?.toString() === result.userId._id.toString()
+          resultUserId &&
+          q.submittedAnswer.userId?.toString() === resultUserId
       )
       .map((q) => ({
         question: q.question,
@@ -175,11 +177,13 @@ const getAllResults = asyncHandler(async (req, res) => {
 
   // Combine MCQ and coding results
   const combinedResults = results.map((result) => {
+    const resultUserId = result.userId?._id?.toString();
     const studentCodingSubmissions = codingQuestions
       .filter(
         (q) =>
           q.submittedAnswer &&
-          q.submittedAnswer.userId?.toString() === result.userId._id.toString()
+          resultUserId &&
+          q.submittedAnswer.userId?.toString() === resultUserId
       )
       .map((q) => ({
         question: q.question,

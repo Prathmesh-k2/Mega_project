@@ -11,12 +11,12 @@ import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import { Container } from '@mui/material';
-import { useGetQuestionsQuery } from 'src/slices/examApiSlice';
 import { useNavigate, useParams } from 'react-router';
 import axiosInstance from '../../../axios';
 import { toast } from 'react-toastify';
 
-export default function MultipleChoiceQuestion({ questions, saveUserTestScore, submitTest }) {
+export default function MultipleChoiceQuestion({ questions, saveUserTestScore, submitTest, disabled = false }) {
+  const questionList = Array.isArray(questions) ? questions : [];
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selectedOption, setSelectedOption] = useState(null);
   const [score, setScore] = useState(0);
@@ -28,16 +28,30 @@ export default function MultipleChoiceQuestion({ questions, saveUserTestScore, s
   const [isFinishTest, setisFinishTest] = useState(false);
 
   useEffect(() => {
-    setIsLastQuestion(currentQuestion === questions.length - 1);
-  }, [currentQuestion, questions.length]);
+    setCurrentQuestion((questionIndex) => (
+      questionList.length > 0
+        ? Math.min(questionIndex, questionList.length - 1)
+        : 0
+    ));
+  }, [questionList.length]);
+
+  useEffect(() => {
+    setIsLastQuestion(
+      questionList.length > 0 && currentQuestion === questionList.length - 1,
+    );
+  }, [currentQuestion, questionList.length]);
 
   const handleOptionChange = (event) => {
     setSelectedOption(event.target.value);
   };
 
   const handleNextQuestion = async () => {
+    const currentQuestionData = questionList[currentQuestion];
+    if (!currentQuestionData) {
+      return;
+    }
+
     let isCorrect = false;
-    const currentQuestionData = questions[currentQuestion];
 
     if (currentQuestionData && currentQuestionData.options) {
       const correctOption = currentQuestionData.options.find((option) => option.isCorrect);
@@ -88,12 +102,21 @@ export default function MultipleChoiceQuestion({ questions, saveUserTestScore, s
     }
 
     setSelectedOption(null);
-    if (currentQuestion < questions.length - 1) {
+    if (currentQuestion < questionList.length - 1) {
       setCurrentQuestion(currentQuestion + 1);
     } else {
       setisFinishTest(true);
     }
   };
+
+  const currentQuestionData = questionList[currentQuestion];
+  if (!currentQuestionData) {
+    return (
+      <Typography variant="body1" role="status">
+        No questions are available for this exam yet.
+      </Typography>
+    );
+  }
 
   return (
     <Card
@@ -114,7 +137,7 @@ export default function MultipleChoiceQuestion({ questions, saveUserTestScore, s
           Question {currentQuestion + 1}:
         </Typography>
         <Typography variant="body1" mb={3}>
-          {questions[currentQuestion].question}
+          {currentQuestionData.question}
         </Typography>
         <Box mb={10}>
           <FormControl component="fieldset">
@@ -123,12 +146,13 @@ export default function MultipleChoiceQuestion({ questions, saveUserTestScore, s
               name="quiz"
               value={selectedOption}
               onChange={handleOptionChange}
+              aria-disabled={disabled}
             >
-              {questions[currentQuestion].options.map((option) => (
+              {(Array.isArray(currentQuestionData.options) ? currentQuestionData.options : []).map((option) => (
                 <FormControlLabel
                   key={option._id}
                   value={option._id}
-                  control={<Radio />}
+                  control={<Radio disabled={disabled} />}
                   label={option.optionText}
                 />
               ))}
@@ -140,7 +164,7 @@ export default function MultipleChoiceQuestion({ questions, saveUserTestScore, s
             variant="contained"
             color="primary"
             onClick={handleNextQuestion}
-            disabled={selectedOption === null}
+            disabled={disabled || selectedOption === null}
             style={{ marginLeft: 'auto' }}
           >
             {isLastQuestion ? 'Proceed to Coding' : 'Next Question'}

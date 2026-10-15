@@ -11,6 +11,7 @@ import {
   IconChartBar,
   IconEye,
   IconDeviceDesktopAnalytics
+  ,IconUsers
 } from '@tabler/icons-react';
 
 import { uniqueId } from 'lodash';
@@ -80,6 +81,12 @@ const Menuitems = [
     title: 'Live Monitoring',
     icon: IconEye,
     href: '/live-monitoring',
+  },
+  {
+    id: uniqueId(),
+    title: 'Students',
+    icon: IconUsers,
+    href: '/admin/students',
   },
   {
     id: uniqueId(),

@@ -1,7 +1,16 @@
 import mongoose from "mongoose";
+import { randomUUID } from "crypto";
 
 const violationEventSchema = new mongoose.Schema(
   {
+    eventId: {
+      type: String,
+      required: true,
+      default: randomUUID,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
     sessionId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "ExamSession",
@@ -27,6 +36,7 @@ const violationEventSchema = new mongoose.Schema(
         "BOOK_DETECTED",
         "LAPTOP_DETECTED",
         "PROHIBITED_OBJECT",
+        "PERSON_IN_BACKGROUND",
         "TAB_SWITCH",
         "WINDOW_BLUR",
         "FULLSCREEN_EXIT",
@@ -63,6 +73,23 @@ const violationEventSchema = new mongoose.Schema(
       default: "",
     },
     evidencePath: {
+      type: String,
+      default: "",
+    },
+    evidenceStatus: {
+      type: String,
+      enum: ["PENDING", "CAPTURED", "UPLOADED", "FAILED", "NOT_APPLICABLE"],
+      default: "NOT_APPLICABLE",
+    },
+    evidenceMimeType: {
+      type: String,
+      default: "",
+    },
+    evidenceSize: {
+      type: Number,
+      default: 0,
+    },
+    evidenceFailureReason: {
       type: String,
       default: "",
     },

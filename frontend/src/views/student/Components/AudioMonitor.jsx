@@ -14,12 +14,19 @@
 import { useEffect, useRef, useCallback } from 'react';
 import PROCTORING_CONFIG from '../../../config/proctoring';
 
+const createEventId = () => (
+  typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+);
+
 export default function AudioMonitor({ onViolation, isActive }) {
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const streamRef = useRef(null);
   const intervalRef = useRef(null);
   const lastEventTime = useRef({});
+  const activeFramesRef = useRef(0);
 
   const throttle = useCallback((eventType) => {
     const now = Date.now();
@@ -35,10 +42,12 @@ export default function AudioMonitor({ onViolation, isActive }) {
       if (!isActive) return;
       if (!throttle(eventType)) return;
       onViolation({
+        eventId: createEventId(),
         eventType,
         confidence,
         description: `${eventType} detected by audio monitor`,
-        metadata,
+        cameraSource: 'microphone',
+        metadata: { ...metadata, cameraSource: 'microphone' },
       });
     },
     [isActive, onViolation, throttle],
@@ -90,12 +99,37 @@ export default function AudioMonitor({ onViolation, isActive }) {
 
           const { NOISE_THRESHOLD, SPEECH_THRESHOLD } = PROCTORING_CONFIG.audio;
 
-          if (rms >= SPEECH_THRESHOLD) {
+          // RMS alone only measures loudness. Require several active frames
+          // and a speech-like zero-crossing rate before labeling activity speech.
+          let zeroCrossings = 0;
+          for (let i = 1; i < bufferLength; i += 1) {
+            if ((dataArray[i - 1] < 0) !== (dataArray[i] < 0)) zeroCrossings += 1;
+          }
+          const zeroCrossingRate = zeroCrossings / bufferLength;
+          const speechLike = rms >= SPEECH_THRESHOLD
+            && zeroCrossingRate >= 0.02
+            && zeroCrossingRate <= 0.35;
+
+          if (speechLike) {
+            activeFramesRef.current += 1;
+          } else {
+            activeFramesRef.current = 0;
+          }
+
+          if (activeFramesRef.current >= 2) {
             const confidence = Math.min(1.0, rms / 0.5);
-            emit('SPEECH_DETECTED', confidence, { rms: rms.toFixed(4) });
+            emit('SPEECH_DETECTED', confidence, {
+              rms: rms.toFixed(4),
+              zeroCrossingRate: zeroCrossingRate.toFixed(4),
+              sustainedFrames: activeFramesRef.current,
+              note: 'Probable speech activity; review with other evidence.',
+            });
           } else if (rms >= NOISE_THRESHOLD) {
             const confidence = Math.min(1.0, rms / 0.3);
-            emit('BACKGROUND_NOISE', confidence, { rms: rms.toFixed(4) });
+            emit('BACKGROUND_NOISE', confidence, {
+              rms: rms.toFixed(4),
+              note: 'Microphone volume activity; not proof of speech or cheating.',
+            });
           }
         }, PROCTORING_CONFIG.audio.ANALYSIS_INTERVAL);
 
@@ -117,6 +151,7 @@ export default function AudioMonitor({ onViolation, isActive }) {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
+      activeFramesRef.current = 0;
       console.log('[AudioMonitor] Audio monitoring stopped');
     };
   }, [isActive, emit]);

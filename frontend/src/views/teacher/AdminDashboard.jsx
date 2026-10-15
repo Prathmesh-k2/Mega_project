@@ -119,11 +119,28 @@ const AdminDashboard = () => {
             />
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
+            <StatCard title="Total Attempts" value={stats.totalAttempts || 0} icon={<TrendIcon sx={{ color: 'info.main' }} />} color="info" />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <StatCard title="Completed Attempts" value={stats.completedSessions || 0} icon={<SafeIcon sx={{ color: 'success.main' }} />} color="success" />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <StatCard title="Needs Review" value={stats.reviewSessions || 0} icon={<WarningIcon sx={{ color: 'warning.main' }} />} color="warning" />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
             <StatCard
               title="Total Exams"
               value={stats.totalExams || 0}
               icon={<ExamIcon sx={{ color: 'info.main' }} />}
               color="info"
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <StatCard
+              title="Submitted Results"
+              value={stats.totalResults || 0}
+              icon={<SafeIcon sx={{ color: 'success.main' }} />}
+              color="success"
             />
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
@@ -260,6 +277,41 @@ const AdminDashboard = () => {
                       <TableCell>
                         {new Date(session.createdAt).toLocaleDateString()}
                       </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </DashboardCard>
+
+        <DashboardCard title="Recent Submitted Results">
+          <TableContainer component={Paper}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Student</TableCell>
+                  <TableCell>Exam</TableCell>
+                  <TableCell>Score</TableCell>
+                  <TableCell>Marks</TableCell>
+                  <TableCell>Submitted</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(data?.recentResults || []).length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} align="center">
+                      No submitted results yet
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  data.recentResults.map((result) => (
+                    <TableRow key={result._id} hover>
+                      <TableCell>{result.userId?.name || result.userId?.email || 'Unknown student'}</TableCell>
+                      <TableCell>{result.examName}</TableCell>
+                      <TableCell>{Number(result.percentage || 0).toFixed(1)}%</TableCell>
+                      <TableCell>{result.totalMarks || 0}</TableCell>
+                      <TableCell>{result.createdAt ? new Date(result.createdAt).toLocaleString() : '—'}</TableCell>
                     </TableRow>
                   ))
                 )}

@@ -24,6 +24,8 @@ import {
 import PageContainer from 'src/components/container/PageContainer';
 import DashboardCard from '../../components/shared/DashboardCard';
 import { useGetActiveMonitoringQuery } from '../../slices/proctoringApiSlice';
+import { io } from 'socket.io-client';
+import { useSelector } from 'react-redux';
 
 const formatTime = (seconds) => {
   const m = Math.floor(seconds / 60);
@@ -33,8 +35,31 @@ const formatTime = (seconds) => {
 
 const LiveMonitoringPage = () => {
   const { data: sessions, isLoading, error } = useGetActiveMonitoringQuery(undefined, {
-    pollingInterval: 5000,
+    pollingInterval: 30000, // Reduced polling since socket handles live updates
   });
+
+  const { userInfo } = useSelector((state) => state.auth);
+  const [liveSessions, setLiveSessions] = React.useState({});
+
+  React.useEffect(() => {
+    // Authenticated socket connection
+    const socket = io(window.location.origin, {
+        auth: { token: userInfo?.token } // Auth to join `admin-monitoring`
+    });
+
+    socket.on('proctoring-update', (payload) => {
+        if (!payload || !payload.session) return;
+        setLiveSessions((prev) => ({
+            ...prev,
+            [payload.session.id]: {
+                ...payload.session,
+                latestViolation: payload.violation
+            }
+        }));
+    });
+
+    return () => socket.disconnect();
+  }, [userInfo]);
 
   if (isLoading) {
     return (
@@ -48,7 +73,14 @@ const LiveMonitoringPage = () => {
     return <Alert severity="error">Failed to load monitoring data</Alert>;
   }
 
-  const activeSessions = sessions || [];
+  // Base sessions mapped with live socket overrides
+  const activeSessions = (sessions || []).map(s => {
+      const live = liveSessions[s._id];
+      if (live) {
+          return { ...s, ...live, totalViolations: live.totalViolations || s.totalViolations, classification: live.classification || s.classification };
+      }
+      return s;
+  });
 
   return (
     <PageContainer title="Live Monitoring" description="Monitor active exam sessions in real-time">

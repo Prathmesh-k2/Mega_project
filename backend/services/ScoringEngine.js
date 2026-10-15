@@ -105,43 +105,52 @@ export function calculateFairnessScore(hybridScore) {
   return Math.max(0, 100 - hybridScore);
 }
 
-/**
- * Decision Engine: classify session based on hybrid score.
- * Returns { status, score, threshold, reason }.
- */
 export function classifyStatus(hybridScore, violations = []) {
-  const { SAFE_MAX, WARNING_MAX } = PROCTORING_CONFIG.decision;
+  const { SAFE_MAX, WARNING_MAX, ADMIN_REVIEW_MAX } = PROCTORING_CONFIG.decision;
 
   let status, threshold, reason;
 
-  if (hybridScore <= SAFE_MAX) {
+  // Build specific reason for violations
+  const types = {};
+  let fullscreenExitCount = 0;
+  for (const v of violations) {
+    types[v.eventType] = (types[v.eventType] || 0) + 1;
+    if (v.eventType === 'FULLSCREEN_EXIT') fullscreenExitCount++;
+  }
+  const topTypes = Object.entries(types)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([type, count]) => `${type}(${count})`)
+    .join(", ");
+
+  const generatedReason = `Activities detected: ${topTypes}`;
+
+  // Rule: At three full-screen exits, explicitly overwrite score -> 60 and policy -> ELIMINATION
+  if (fullscreenExitCount >= 3) {
+      status = "MALPRACTICE"; 
+      threshold = 60;
+      reason = "Explicit Exam Policy Violation: Exited Fullscreen 3+ Times";
+  } else if (hybridScore <= SAFE_MAX) {
     status = "SAFE";
     threshold = SAFE_MAX;
     reason = "No significant suspicious activities detected";
   } else if (hybridScore <= WARNING_MAX) {
     status = "WARNING";
     threshold = WARNING_MAX;
-
-    // Build specific reason
-    const types = {};
-    for (const v of violations) {
-      types[v.eventType] = (types[v.eventType] || 0) + 1;
-    }
-    const topTypes = Object.entries(types)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([type, count]) => `${type}(${count})`)
-      .join(", ");
     reason = `Repeated suspicious activities detected: ${topTypes}`;
+  } else if (hybridScore <= ADMIN_REVIEW_MAX) {
+    status = "ADMIN_REVIEW";
+    threshold = ADMIN_REVIEW_MAX;
+    reason = `Admin Review Required: ${generatedReason}`;
   } else {
     status = "MALPRACTICE";
-    threshold = 70;
+    threshold = 60;
     reason = "Severe and/or repeated cheating behaviors detected";
   }
 
   return {
     status,
-    score: hybridScore,
+    score: (fullscreenExitCount >= 3) ? Math.max(60, hybridScore) : hybridScore,
     threshold,
     reason,
   };
@@ -160,8 +169,8 @@ export function calculateFullScore(violations) {
   return {
     eventScore,
     aiScore,
-    hybridScore,
-    fairnessScore,
+    hybridScore: decision.score,
+    fairnessScore: calculateFairnessScore(decision.score),
     totalPenalties: violations.reduce(
       (sum, v) => sum + (v.penaltyPoints || 0),
       0

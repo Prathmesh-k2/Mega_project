@@ -52,6 +52,20 @@ export const userApiSlice = apiSlice.injectEndpoints({
         body: data,
       }),
     }),
+    sendPasswordResetOtp: builder.mutation({
+      query: (data) => ({
+        url: `${USERS_URL}/forgot-password`,
+        method: 'POST',
+        body: data,
+      }),
+    }),
+    resetPassword: builder.mutation({
+      query: (data) => ({
+        url: `${USERS_URL}/reset-password`,
+        method: 'POST',
+        body: data,
+      }),
+    }),
     // [NEW] Get all pending (unapproved) users
     getPendingUsers: builder.query({
       query: () => ({
@@ -86,6 +100,8 @@ export const {
   useRegisterMutation,
   useUpdateUserMutation,
   useSendOtpMutation,
+  useSendPasswordResetOtpMutation,
+  useResetPasswordMutation,
   useGetPendingUsersQuery,
   useApproveUserMutation,
   useRejectUserMutation,

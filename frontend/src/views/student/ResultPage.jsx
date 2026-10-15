@@ -114,20 +114,13 @@ const ResultPage = () => {
     setCodeDialogOpen(true);
   };
 
-  const handleExamChange = async (examId) => {
+  const handleExamChange = (examId) => {
     setSelectedExam(examId);
-    try {
-      setLoading(true);
-      const response = await axiosInstance.get(`/api/users/results/exam/${examId}`, {
-        withCredentials: true,
-      });
-      setResults(response.data.data);
-    } catch (err) {
-      toast.error('Failed to fetch exam results');
-    } finally {
-      setLoading(false);
-    }
   };
+
+  const getExam = (examId) =>
+    exams.find((exam) => exam.examId === examId || exam._id === examId);
+  const getExamName = (examId) => getExam(examId)?.examName || examId || 'Unknown exam';
 
   const filteredResults = results.filter((result) => {
     const matchesSearch =
@@ -136,6 +129,13 @@ const ResultPage = () => {
     const matchesExam = selectedExam === 'all' || result.examId === selectedExam;
     return matchesSearch && matchesExam;
   });
+
+  const groupedResults = filteredResults.reduce((groups, result) => {
+    const key = result.examId || 'unknown';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(result);
+    return groups;
+  }, {});
 
   if (loading) {
     return (
@@ -161,7 +161,7 @@ const ResultPage = () => {
 
     const chartOptions = {
       chart: { type: 'bar', toolbar: { show: false } },
-      xaxis: { categories: results.map(r => r.examId?.examName || 'Exam') },
+      xaxis: { categories: results.map(r => getExamName(r.examId)) },
       colors: ['#5D87FF'],
       plotOptions: { bar: { borderRadius: 4, dataLabels: { position: 'top' } } },
       dataLabels: { enabled: true, formatter: val => val + '%' },
@@ -185,7 +185,7 @@ const ResultPage = () => {
             <Card sx={{ bgcolor: 'success.light', color: 'success.dark' }}>
               <CardContent>
                 <Typography variant="h6" gutterBottom>Highest Score (Strong Concept)</Typography>
-                <Typography variant="h4">{highestExam ? highestExam.examId?.examName : 'N/A'}</Typography>
+                <Typography variant="h4">{highestExam ? getExamName(highestExam.examId) : 'N/A'}</Typography>
                 <Typography variant="subtitle1">{highestExam ? `${highestExam.percentage.toFixed(1)}%` : ''}</Typography>
               </CardContent>
             </Card>
@@ -194,7 +194,7 @@ const ResultPage = () => {
             <Card sx={{ bgcolor: 'error.light', color: 'error.dark' }}>
               <CardContent>
                 <Typography variant="h6" gutterBottom>Lowest Score (Weak Concept)</Typography>
-                <Typography variant="h4">{weakestExam ? weakestExam.examId?.examName : 'N/A'}</Typography>
+                <Typography variant="h4">{weakestExam ? getExamName(weakestExam.examId) : 'N/A'}</Typography>
                 <Typography variant="subtitle1">{weakestExam ? `${weakestExam.percentage.toFixed(1)}%` : ''}</Typography>
               </CardContent>
             </Card>
@@ -227,7 +227,7 @@ const ResultPage = () => {
                   <TableBody>
                     {results.map((result) => (
                       <TableRow key={result._id}>
-                        <TableCell>{result.examId?.examName || 'Exam'}</TableCell>
+                        <TableCell>{getExamName(result.examId)}</TableCell>
                         <TableCell>
                           <Chip
                             label={`${result.percentage.toFixed(1)}%`}
@@ -352,7 +352,7 @@ const ResultPage = () => {
                 >
                   <MenuItem value="all">All Exams</MenuItem>
                   {exams.map((exam) => (
-                    <MenuItem key={exam._id} value={exam._id}>
+                    <MenuItem key={exam.examId || exam._id} value={exam.examId || exam._id}>
                       {exam.examName}
                     </MenuItem>
                   ))}
@@ -374,56 +374,87 @@ const ResultPage = () => {
               />
             </Box>
 
-            <TableContainer component={Paper}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Student Name</TableCell>
-                    <TableCell>Email</TableCell>
-                    <TableCell>Exam</TableCell>
-                    <TableCell>Score</TableCell>
-                    <TableCell>Submission Date</TableCell>
-                    <TableCell>Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredResults.map((result) => (
-                    <TableRow key={result._id}>
-                      <TableCell>{result.userId?.name}</TableCell>
-                      <TableCell>{result.userId?.email}</TableCell>
-                      <TableCell>
-                        {exams.find((e) => e._id === result.examId)?.examName || result.examId}
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={`${result.percentage.toFixed(1)}%`}
-                          color={result.percentage >= 70 ? 'success' : 'warning'}
-                        />
-                      </TableCell>
-                      <TableCell>{new Date(result.createdAt).toLocaleDateString()}</TableCell>
-                      <TableCell>
-                        <IconButton
-                          onClick={() => handleToggleVisibility(result._id)}
-                          color={result.showToStudent ? 'success' : 'default'}
-                        >
-                          {result.showToStudent ? <Visibility /> : <VisibilityOff />}
-                        </IconButton>
-                        {result.sessionId && (
-                          <Button 
-                            size="small" 
-                            variant="outlined" 
-                            sx={{ ml: 1 }}
-                            onClick={() => navigate(`/exam/${result.examId}/report/${result.sessionId}`)}
-                          >
-                            Report
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+            {Object.entries(groupedResults).map(([examId, examResults]) => {
+              const rankedResults = [...examResults].sort(
+                (a, b) => Number(b.percentage || 0) - Number(a.percentage || 0),
+              );
+              const average = examResults.reduce(
+                (sum, result) => sum + Number(result.percentage || 0),
+                0,
+              ) / examResults.length;
+
+              return (
+                <Box key={examId} mb={3}>
+                  <Box
+                    display="flex"
+                    justifyContent="space-between"
+                    alignItems="center"
+                    px={2}
+                    py={1.5}
+                    bgcolor="primary.light"
+                  >
+                    <Typography variant="h6">{getExamName(examId)}</Typography>
+                    <Typography variant="body2">
+                      {examResults.length} submitted · Average {average.toFixed(1)}%
+                    </Typography>
+                  </Box>
+                  <TableContainer component={Paper}>
+                    <Table>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Rank</TableCell>
+                          <TableCell>Student Name</TableCell>
+                          <TableCell>Email</TableCell>
+                          <TableCell>Score / Marks</TableCell>
+                          <TableCell>Submission Date</TableCell>
+                          <TableCell>Actions</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {rankedResults.map((result, index) => (
+                          <TableRow key={result._id}>
+                            <TableCell>{index + 1}</TableCell>
+                            <TableCell>{result.userId?.name || 'Unknown student'}</TableCell>
+                            <TableCell>{result.userId?.email || '—'}</TableCell>
+                            <TableCell>
+                              <Chip
+                                label={`${Number(result.percentage || 0).toFixed(1)}% · ${result.totalMarks || 0} marks`}
+                                color={Number(result.percentage || 0) >= 70 ? 'success' : 'warning'}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              {result.createdAt ? new Date(result.createdAt).toLocaleString() : '—'}
+                            </TableCell>
+                            <TableCell>
+                              <IconButton
+                                onClick={() => handleToggleVisibility(result._id)}
+                                color={result.showToStudent ? 'success' : 'default'}
+                                title={result.showToStudent ? 'Visible to student' : 'Hidden from student'}
+                              >
+                                {result.showToStudent ? <Visibility /> : <VisibilityOff />}
+                              </IconButton>
+                              {result.sessionId && (
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  sx={{ ml: 1 }}
+                                  onClick={() => navigate(`/exam/${result.examId}/report/${result.sessionId}`)}
+                                >
+                                  Report
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Box>
+              );
+            })}
+            {Object.keys(groupedResults).length === 0 && (
+              <Alert severity="info">No submitted exam results match the selected filters.</Alert>
+            )}
           </DashboardCard>
         </Grid>
       </Grid>

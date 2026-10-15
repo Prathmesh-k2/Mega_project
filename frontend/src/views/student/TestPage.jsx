@@ -8,7 +8,11 @@ import NumberOfQuestions from './Components/NumberOfQuestions';
 import ProctoringManager from './Components/ProctoringManager';
 import ExamCameraSetup from './ExamCameraSetup';
 import { useGetExamsQuery, useGetQuestionsQuery } from '../../slices/examApiSlice';
-import { useStartSessionMutation, useSubmitSessionMutation } from 'src/slices/sessionApiSlice';
+import {
+  useStartSessionMutation,
+  useSubmitSessionMutation,
+  useTerminateSessionMutation,
+} from 'src/slices/sessionApiSlice';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 
@@ -18,13 +22,15 @@ const TestPage = () => {
   const [examDurationInSeconds, setExamDurationInSeconds] = useState(0);
   const { data: userExamdata, isLoading: isExamsLoading } = useGetExamsQuery();
   const { userInfo } = useSelector((state) => state.auth);
-  
+
   const [startSession] = useStartSessionMutation();
   const [submitSessionMutation] = useSubmitSessionMutation();
+  const [terminateSessionMutation] = useTerminateSessionMutation();
   
   const [sessionId, setSessionId] = useState(null);
   const [isExamActive, setIsExamActive] = useState(false);
   const webcamRef = useRef(null);
+  const mobileVideoRef = useRef(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMcqCompleted, setIsMcqCompleted] = useState(false);
@@ -32,8 +38,10 @@ const TestPage = () => {
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const [isMobileSetupComplete, setIsMobileSetupComplete] = useState(false);
   const [permissionsError, setPermissionsError] = useState('');
+  const [isFullscreenRecovery, setIsFullscreenRecovery] = useState(false);
 
   const requestPermissions = async () => {
+    let permissionStream;
     try {
       setPermissionsError('');
 
@@ -51,10 +59,8 @@ const TestPage = () => {
       }
 
       // Request both audio and video
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      // We no longer stop the tracks here. The <Webcam> component will properly manage the active stream.
-      // If we stop it, the webcam tag sometimes renders a black screen causing the AI to fail face detection.
-      
+      permissionStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      permissionStream.getTracks().forEach((track) => track.stop());
       setPermissionsGranted(true);
     } catch (err) {
       console.error('Permission error:', err);
@@ -89,6 +95,13 @@ const TestPage = () => {
         }).unwrap();
         
         setSessionId(res.session._id);
+        
+        if (res.session.status === 'TERMINATED' || res.session.status === 'COMPLETED') {
+           toast.error('This exam session is permanently locked (Terminated/Completed).');
+           navigate(`/exam/${examId}/report/${res.session._id}`);
+           return;
+        }
+
         setIsExamActive(true);
         if (res.resumed) {
           toast.info('Session resumed.');
@@ -105,7 +118,14 @@ const TestPage = () => {
     };
 
     initSession();
-  }, [examId, startSession, sessionId, userInfo]);
+  }, [
+    examId,
+    startSession,
+    sessionId,
+    userInfo,
+    permissionsGranted,
+    isMobileSetupComplete,
+  ]);
 
   const [questions, setQuestions] = useState([]);
   const { data, isLoading } = useGetQuestionsQuery(examId);
@@ -145,9 +165,17 @@ const TestPage = () => {
     }
   };
   
-  const handleTerminate = (reason) => {
+  const handleTerminate = async (reason) => {
     toast.error(reason);
     setIsExamActive(false);
+    if (sessionId) {
+      try {
+        await terminateSessionMutation({ sessionId, reason }).unwrap();
+      } catch (error) {
+        console.error('Failed to persist exam termination:', error);
+        toast.error('Termination could not be confirmed by the server.');
+      }
+    }
     navigate(`/exam/${examId}/report/${sessionId}`);
   };
 
@@ -211,8 +239,9 @@ const TestPage = () => {
     return (
       <PageContainer title="Hardware Setup" description="Mobile Camera Setup">
         <Box pt="3rem" display="flex" justifyContent="center">
-          <ExamCameraSetup 
+          <ExamCameraSetup
             sessionId={sessionId} 
+            mobileVideoRef={mobileVideoRef}
             isSetupComplete={false} 
             onSetupSuccess={() => setIsMobileSetupComplete(true)} 
           />
@@ -247,6 +276,7 @@ const TestPage = () => {
                       questionLength={questions.length}
                       submitTest={handleTestSubmission}
                       examDurationInSeconds={examDurationInSeconds}
+                      paused={isFullscreenRecovery}
                     />
                   </Box>
                 </BlankCard>
@@ -271,9 +301,10 @@ const TestPage = () => {
                 ) : (
                   <MultipleChoiceQuestion
                     submitTest={handleTestSubmission}
-                    questions={data}
+                    questions={questions}
                     saveUserTestScore={saveUserTestScore}
                     sessionId={sessionId}
+                    disabled={isFullscreenRecovery}
                   />
                 )}
               </Box>
@@ -288,6 +319,7 @@ const TestPage = () => {
                   <Box p={2}>
                     <ExamCameraSetup 
                       sessionId={sessionId} 
+                      mobileVideoRef={mobileVideoRef}
                       isSetupComplete={true} 
                       onSetupSuccess={() => {}} 
                     />
@@ -309,8 +341,10 @@ const TestPage = () => {
                        sessionId={sessionId} 
                        examId={examId}
                        webcamRef={webcamRef} 
+                       mobileVideoRef={mobileVideoRef}
                        isActive={isExamActive} 
                        onTerminate={handleTerminate} 
+                       onFullscreenRecoveryChange={setIsFullscreenRecovery}
                     />
                   </Box>
                 </BlankCard>

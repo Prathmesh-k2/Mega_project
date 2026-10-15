@@ -28,6 +28,7 @@ const Coder = Loadable(lazy(() => import('../views/student/Coder')));
 const Error = Loadable(lazy(() => import('../views/authentication/Error')));
 const Register = Loadable(lazy(() => import('../views/authentication/Register')));
 const Login = Loadable(lazy(() => import('../views/authentication/Login')));
+const ForgotPassword = Loadable(lazy(() => import('../views/authentication/ForgotPassword')));
 const UserAccount = Loadable(lazy(() => import('../views/authentication/UserAccount')));
 
 // Teacher Routes
@@ -42,6 +43,9 @@ const UserApprovalsPage = Loadable(lazy(() => import('src/views/teacher/UserAppr
 const AdminDashboard = Loadable(lazy(() => import('./../views/teacher/AdminDashboard')));
 const AnalyticsPage = Loadable(lazy(() => import('./../views/teacher/AnalyticsPage')));
 const LiveMonitoringPage = Loadable(lazy(() => import('./../views/teacher/LiveMonitoringPage')));
+const StudentManagementPage = Loadable(lazy(() => import('./../views/teacher/StudentManagementPage')));
+const StudentHistoryPage = Loadable(lazy(() => import('./../views/teacher/StudentHistoryPage')));
+const AttemptDetailsPage = Loadable(lazy(() => import('./../views/teacher/AttemptDetailsPage')));
 
 // Common/Student Routes
 const ProctoringReport = Loadable(lazy(() => import('./../views/student/ProctoringReport')));
@@ -71,6 +75,9 @@ const Router = createBrowserRouter(
             <Route path="/admin-dashboard" exact={true} element={<AdminDashboard />} />
             <Route path="/analytics" exact={true} element={<AnalyticsPage />} />
             <Route path="/live-monitoring" exact={true} element={<LiveMonitoringPage />} />
+            <Route path="/admin/students" exact={true} element={<StudentManagementPage />} />
+            <Route path="/admin/students/:studentId" exact={true} element={<StudentHistoryPage />} />
+            <Route path="/admin/attempts/:sessionId" exact={true} element={<AttemptDetailsPage />} />
           </Route>
         </Route>
         <Route path="/" element={<ExamLayout />}>
@@ -92,6 +99,7 @@ const Router = createBrowserRouter(
         <Route path="404" element={<Error />} />
         <Route path="/auth/register" element={<Register />} />
         <Route path="/auth/login" element={<Login />} />
+        <Route path="/auth/forgot-password" element={<ForgotPassword />} />
         {/* <Route path="*" element={<Navigate to="/auth/404" />} /> */}
       </Route>
 

@@ -5,6 +5,9 @@ import {
   getDashboardStats,
   getAnalytics,
   getActiveMonitoring,
+  getStudents,
+  getStudentHistory,
+  getAttemptDetails,
 } from "../controllers/adminController.js";
 
 const adminRoutes = express.Router();
@@ -16,5 +19,8 @@ adminRoutes.use(adminOnly);
 adminRoutes.get("/dashboard", getDashboardStats);
 adminRoutes.get("/analytics", getAnalytics);
 adminRoutes.get("/active-sessions", getActiveMonitoring);
+adminRoutes.get("/students", getStudents);
+adminRoutes.get("/students/:studentId", getStudentHistory);
+adminRoutes.get("/attempts/:sessionId", getAttemptDetails);
 
 export default adminRoutes;

@@ -3,6 +3,15 @@ import ViolationEvent from "../models/violationEventModel.js";
 import ExamSession from "../models/examSessionModel.js";
 import PROCTORING_CONFIG from "../config/proctoring.js";
 import { calculateFullScore } from "../services/ScoringEngine.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const evidenceDirectory = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../uploads/proctoring",
+);
+fs.mkdirSync(evidenceDirectory, { recursive: true });
 
 // @desc    Log a violation event
 // @route   POST /api/proctoring/events
@@ -15,11 +24,27 @@ const logViolation = asyncHandler(async (req, res) => {
     description,
     evidencePath,
     metadata,
+    eventId,
   } = req.body;
 
   if (!sessionId || !eventType) {
     res.status(400);
     throw new Error("sessionId and eventType are required");
+  }
+  if (eventId) {
+    const existing = await ViolationEvent.findOne({ eventId });
+    if (existing) {
+      const scoring = calculateFullScore(await ViolationEvent.find({ sessionId }));
+      return res.status(200).json({
+        success: true,
+        duplicate: true,
+        violation: existing,
+        currentScore: scoring.hybridScore,
+        classification: scoring.classification,
+        fairnessScore: scoring.fairnessScore,
+        shouldTerminate: false,
+      });
+    }
   }
 
   // Verify session is active
@@ -42,6 +67,7 @@ const logViolation = asyncHandler(async (req, res) => {
   // Create violation event
   const violation = await ViolationEvent.create({
     sessionId,
+    eventId,
     studentId: session.studentId,
     examId: session.examId,
     eventType,
@@ -50,6 +76,9 @@ const logViolation = asyncHandler(async (req, res) => {
     penaltyPoints,
     description: description || `${eventType} detected`,
     evidencePath: evidencePath || "",
+    evidenceStatus: ["NO_FACE_DETECTED", "MULTIPLE_FACES", "CELL_PHONE_DETECTED", "BOOK_DETECTED", "PERSON_IN_BACKGROUND", "PROHIBITED_OBJECT", "BACKGROUND_NOISE"].includes(eventType)
+      ? "PENDING"
+      : "NOT_APPLICABLE",
     metadata: metadata || {},
   });
 
@@ -80,44 +109,142 @@ const logViolation = asyncHandler(async (req, res) => {
     PROCTORING_CONFIG.termination.ENABLED &&
     scoring.hybridScore >= PROCTORING_CONFIG.termination.SCORE_THRESHOLD;
 
-  res.status(201).json({
+  if (shouldTerminate) {
+    session.status = "TERMINATED";
+    session.terminatedAt = new Date();
+    session.terminationReason = "Exam terminated: Malpractice threshold exceeded";
+    await session.save();
+  }
+
+  const payload = {
     success: true,
     violation,
     currentScore: scoring.hybridScore,
     classification: scoring.classification,
     fairnessScore: scoring.fairnessScore,
     shouldTerminate,
-  });
+  };
+
+  // Emit real-time authoritative update to admin UI
+  if (req.io) {
+    req.io.to('admin-monitoring').emit('proctoring-update', {
+        ...payload,
+        session: {
+           id: session._id,
+           status: session.status,
+           studentId: session.studentId,
+           examId: session.examId,
+           totalViolations: session.totalViolations,
+           fullscreenExitCount: session.violationSummary?.fullscreenExitCount || 0
+        }
+    });
+  }
+
+  res.status(201).json(payload);
 });
 
 // @desc    Log evidence (screenshot URL) for a violation
 // @route   POST /api/proctoring/evidence
 // @access  Private
 const logEvidence = asyncHandler(async (req, res) => {
-  const { sessionId, eventType, evidenceUrl } = req.body;
-
-  if (!sessionId || !eventType || !evidenceUrl) {
+  const { eventId, evidenceUrl } = req.body;
+  if (!eventId || !evidenceUrl) {
     res.status(400);
-    throw new Error("sessionId, eventType, and evidenceUrl are required");
+    throw new Error("eventId and evidenceUrl are required");
   }
+  const violation = await ViolationEvent.findOne({ eventId });
+  if (!violation) {
+    res.status(404);
+    throw new Error("Proctoring event not found");
+  }
+  const session = await ExamSession.findById(violation.sessionId);
+  if (!session || session.studentId.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("Evidence update is not authorized");
+  }
+  violation.evidencePath = String(evidenceUrl);
+  violation.evidenceStatus = "UPLOADED";
+  await violation.save();
+  res.status(200).json({ success: true, violation });
+});
 
-  // Create violation with evidence
-  const penaltyPoints = PROCTORING_CONFIG.penalties[eventType] || 0;
-  const severity = PROCTORING_CONFIG.severity[eventType] || "MEDIUM";
+const uploadEvidence = asyncHandler(async (req, res) => {
+    const { eventId, cameraSource } = req.body;
+    if (!eventId || !req.file) {
+      res.status(400);
+      throw new Error("eventId and an evidence image are required");
+    }
+    const event = await ViolationEvent.findOne({ eventId });
+    if (!event) {
+      res.status(404);
+      throw new Error("Proctoring event not found");
+    }
+    const session = await ExamSession.findById(event.sessionId);
+    const isOwner = session?.studentId?.toString() === req.user._id.toString();
+    if (!isOwner || session.status !== "ACTIVE") {
+      res.status(403);
+      throw new Error("Evidence upload is not authorized for this attempt");
+    }
+    if (event.evidenceStatus === "UPLOADED" && event.evidencePath) {
+      return res.status(200).json({ success: true, duplicate: true, event });
+    }
 
-  const violation = await ViolationEvent.create({
-    sessionId,
-    studentId: req.user._id,
-    examId: req.body.examId || "",
-    eventType,
-    severity,
-    confidence: req.body.confidence || 1.0,
-    penaltyPoints: 0, // Evidence doesn't add extra penalty (the event already did)
-    description: `Evidence captured for ${eventType}`,
-    evidencePath: evidenceUrl,
-  });
+    const extension = req.file.mimetype === "image/webp" ? ".webp" : ".jpg";
+    const filename = `${event._id}${extension}`;
+    const destination = path.join(evidenceDirectory, filename);
+    fs.renameSync(req.file.path, destination);
+    event.evidencePath = `/api/proctoring/evidence/${event.eventId}`;
+    event.evidenceStatus = "UPLOADED";
+    event.evidenceMimeType = req.file.mimetype;
+    event.evidenceSize = req.file.size;
+    event.evidenceFailureReason = "";
+    event.metadata = { ...(event.metadata || {}), cameraSource: cameraSource || event.metadata?.cameraSource };
+    await event.save();
+    res.status(201).json({ success: true, event });
+});
 
-  res.status(201).json({ success: true, violation });
+const updateEvidenceStatus = asyncHandler(async (req, res) => {
+    const { eventId, status, failureReason } = req.body;
+    if (!eventId || !["FAILED", "PENDING"].includes(status)) {
+      res.status(400);
+      throw new Error("eventId and a valid evidence status are required");
+    }
+    const event = await ViolationEvent.findOne({ eventId });
+    if (!event) {
+      res.status(404);
+      throw new Error("Proctoring event not found");
+    }
+    const session = await ExamSession.findById(event.sessionId);
+    if (!session || session.studentId.toString() !== req.user._id.toString()) {
+      res.status(403);
+      throw new Error("Evidence status update is not authorized");
+    }
+    event.evidenceStatus = status;
+    event.evidenceFailureReason = String(failureReason || "").slice(0, 500);
+    await event.save();
+    res.status(200).json({ success: true, event });
+});
+
+const getEvidence = asyncHandler(async (req, res) => {
+    const event = await ViolationEvent.findOne({ eventId: req.params.eventId });
+    if (!event || !event.evidencePath || event.evidenceStatus !== "UPLOADED") {
+      res.status(404);
+      throw new Error("Evidence not available");
+    }
+    const session = await ExamSession.findById(event.sessionId);
+    const isOwner = session?.studentId?.toString() === req.user._id.toString();
+    const isAdmin = ["teacher", "admin"].includes(req.user.role);
+    if (!isOwner && !isAdmin) {
+      res.status(403);
+      throw new Error("Evidence access denied");
+    }
+    const extension = event.evidenceMimeType === "image/webp" ? ".webp" : ".jpg";
+    const filePath = path.join(evidenceDirectory, `${event._id}${extension}`);
+    if (!fs.existsSync(filePath)) {
+      res.status(404);
+      throw new Error("Evidence file is missing");
+    }
+    res.type(event.evidenceMimeType || "image/jpeg").sendFile(filePath);
 });
 
 // @desc    Get all violations for a session
@@ -261,6 +388,7 @@ function getViolationSummaryKey(eventType) {
     BOOK_DETECTED: "prohibitedObjectCount",
     LAPTOP_DETECTED: "prohibitedObjectCount",
     PROHIBITED_OBJECT: "prohibitedObjectCount",
+    PERSON_IN_BACKGROUND: "prohibitedObjectCount",
     TAB_SWITCH: "tabSwitchCount",
     WINDOW_BLUR: "windowBlurCount",
     FULLSCREEN_EXIT: "fullscreenExitCount",
@@ -275,6 +403,9 @@ function getViolationSummaryKey(eventType) {
 export {
   logViolation,
   logEvidence,
+  uploadEvidence,
+  updateEvidenceStatus,
+  getEvidence,
   getSessionViolations,
   getSessionReport,
 };

@@ -170,13 +170,224 @@ ProctoAI-MERN utilizes a range of technologies to provide its comprehensive func
 
 More features and improvements are in development and will be included in future updates.
 
+## System Architecture
+
+The application consists of three services:
+
+1. **React frontend** - student and teacher dashboards, exams, webcam monitoring, and
+   client-side proctoring.
+2. **Node.js/Express backend** - authentication, exams, results, sessions, violations,
+   file uploads, and Socket.IO signaling.
+3. **Python FastAPI AI service** - YOLO11 object detection for people and mobile phones.
+
+MongoDB stores application data used by the Node.js backend. During an exam, the
+frontend sends selected camera frames to the AI service and reports proctoring
+events to the Node.js backend.
+
+## Project Structure
+
+```text
+Mega_project/
+├── backend/
+│   ├── config/             # Database and proctoring configuration
+│   ├── controllers/        # Request handlers
+│   ├── middleware/         # Authentication and error middleware
+│   ├── models/             # Mongoose schemas
+│   ├── routes/             # Express API routes
+│   ├── scripts/            # Optional seed scripts
+│   ├── services/           # Scoring and application services
+│   └── server.js           # Node.js API and Socket.IO server
+├── backend-ai/
+│   ├── main.py             # FastAPI /detect and /health endpoints
+│   ├── requirements.txt    # Python dependencies
+│   └── yolo11n.pt          # YOLO11 model weights
+├── frontend/
+│   ├── public/             # Static frontend files
+│   └── src/
+│       ├── components/     # Shared UI components
+│       ├── hooks/          # Webcam and proctoring hooks
+│       ├── layouts/        # Application layouts
+│       ├── routes/         # React Router configuration
+│       ├── services/       # Frontend service clients
+│       ├── slices/         # Redux Toolkit API/state slices
+│       └── views/          # Authentication, student, and teacher pages
+├── .env.example            # Environment variable template
+├── package.json            # Backend and root development scripts
+└── README.md
+```
+
+## Database
+
+The backend uses MongoDB through Mongoose. The default local database is:
+
+```text
+mongodb://localhost:27017/proctoai
+```
+
+The application stores users, exams and questions, exam sessions, results, OTP
+records, and proctoring violation events. MongoDB creates collections as the
+application first uses each model.
+
+## Configuration
+
+Copy the root environment template:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Set at least these values in `.env`:
+
+```env
+NODE_ENV=development
+PORT=5000
+MONGO_URL=mongodb://localhost:27017/proctoai
+JWT_SECRET=replace_with_a_long_random_secret
+```
+
+Optional SMTP variables enable email OTP delivery. If SMTP is not configured,
+development OTP values are logged by the backend. For Uploadcare evidence
+uploads, configure `REACT_APP_UPLOADCARE_PUBLIC_KEY` in `frontend/.env`.
+
+Never commit `.env`, frontend secrets, uploaded evidence, virtual environments,
+or dependency directories.
+
+## Installation
+
+Install JavaScript dependencies from the repository root:
+
+```powershell
+npm install
+npm install --prefix frontend
+```
+
+Install the AI service dependencies:
+
+```powershell
+cd backend-ai
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+cd ..
+```
+
+If PowerShell blocks environment activation, run
+`Set-ExecutionPolicy -Scope Process Bypass` for the current terminal.
+
 ## How to Run
 
-To run this project locally, follow these steps:
+Start MongoDB before starting the application. On Windows, if MongoDB is
+installed as a service, use:
 
-1. Clone this repository.
-2. Copy `.env.example` to `.env` in the project root and fill in `MONGO_URL`, `JWT_SECRET`, and optional SMTP settings.
-3. For evidence uploads during proctoring, create `frontend/.env` with `REACT_APP_UPLOADCARE_PUBLIC_KEY` (see `.env.example`).
-4. Install dependencies: `npm install` in the root, then `npm install` in `frontend`.
-5. Start both with `npm run dev` from the root, or start server (`npm run server`) and client (`npm run client`) separately.
-6. Seed demo users (optional): `node backend/scripts/seed.js` — teachers are created only via seed/DB, not public registration.
+```powershell
+net start MongoDB
+```
+
+### Terminal 1: Node backend and React frontend
+
+From the repository root:
+
+```powershell
+npm run dev
+```
+
+This starts the Node.js backend on `http://localhost:5000` and the React
+frontend on `http://localhost:3000`.
+
+### Terminal 2: Python AI service
+
+Keep the first terminal running and open a second one:
+
+```powershell
+cd backend-ai
+& ".\.venv\Scripts\python.exe" -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+The AI service runs on `http://localhost:8000`. Verify it at
+`http://localhost:8000/health`.
+
+Open the application at:
+
+```text
+http://localhost:3000
+```
+
+### Use port 3001 with ngrok
+
+When a public tunnel is required, run the frontend on port 3001:
+
+```powershell
+cd frontend
+$env:PORT=3001
+npm start
+```
+
+In another terminal, expose that frontend:
+
+```powershell
+ngrok http 3001
+```
+
+Use the HTTPS URL shown by ngrok. The Node backend and AI service still run
+on ports 5000 and 8000.
+
+## Available npm Scripts
+
+Run these commands from the repository root:
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the Node backend and React frontend |
+| `npm run server` | Start only the Node backend with nodemon |
+| `npm run client` | Start only the React frontend |
+| `npm run dev:tunnel` | Start the development services with ngrok |
+| `npm run build --prefix frontend` | Create the React production build |
+
+## Demo Data
+
+After MongoDB is running, optionally seed demo users:
+
+```powershell
+node backend/scripts/seed.js
+```
+
+Teachers are created through the seed/database workflow rather than public
+student registration.
+
+## Service Health Checks
+
+```text
+Frontend: http://localhost:3000
+Node API: http://localhost:5000
+AI API: http://localhost:8000/health
+```
+
+If the AI service reports `No module named uvicorn`, install its dependencies
+using the same Python executable that starts the service:
+
+```powershell
+& ".\backend-ai\.venv\Scripts\python.exe" -m pip install -r ".\backend-ai\requirements.txt"
+```
+
+## GitHub Upload
+
+Before pushing, confirm that secrets and generated files are ignored:
+
+```powershell
+git status
+```
+
+Do not commit `.env`, `node_modules`, `.venv`, `backend-ai/.venv`,
+`backend/uploads`, `__pycache__`, or private credentials. To push this project
+to a new GitHub repository:
+
+```powershell
+git init
+git add .
+git commit -m "Initial ProctoAI project"
+git branch -M main
+git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPOSITORY.git
+git push -u origin main
+```
+
+Replace `YOUR_USERNAME` and `YOUR_REPOSITORY` with the GitHub repository details.

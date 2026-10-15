@@ -57,6 +57,19 @@ export const proctoringApiSlice = apiSlice.injectEndpoints({
       }),
       pollingInterval: 10000, // Refresh every 10 seconds
     }),
+    getAdminStudents: builder.query({
+      query: ({ page = 1, limit = 20, search = '', status = '' } = {}) => ({
+        url: `${ADMIN_URL}/students`,
+        params: { page, limit, search, status },
+        method: 'GET',
+      }),
+    }),
+    getAdminStudentHistory: builder.query({
+      query: (studentId) => `${ADMIN_URL}/students/${studentId}`,
+    }),
+    getAdminAttemptDetails: builder.query({
+      query: (sessionId) => `${ADMIN_URL}/attempts/${sessionId}`,
+    }),
   }),
 });
 
@@ -68,4 +81,7 @@ export const {
   useGetDashboardStatsQuery,
   useGetAnalyticsQuery,
   useGetActiveMonitoringQuery,
+  useGetAdminStudentsQuery,
+  useGetAdminStudentHistoryQuery,
+  useGetAdminAttemptDetailsQuery,
 } = proctoringApiSlice;

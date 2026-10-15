@@ -6,6 +6,8 @@ import {
   registerUser,
   updateUserProfile,
   sendOtp,
+  sendPasswordResetOtp,
+  resetPassword,
   getPendingUsers,
   approveUser,
   rejectUser,
@@ -18,6 +20,8 @@ const userRoutes = express.Router();
 
 // Public routes
 userRoutes.post("/send-otp", sendOtp);
+userRoutes.post("/forgot-password", sendPasswordResetOtp);
+userRoutes.post("/reset-password", resetPassword);
 userRoutes.post("/auth", authUser);
 userRoutes.post("/guest", guestLogin);
 userRoutes.post("/logout", logoutUser);

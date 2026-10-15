@@ -1,8 +1,10 @@
 # Node modules
 node_modules/
+**/node_modules/
 
 # Environment variables
 .env
+**/.env
 
 # Logs
 logs
@@ -34,11 +36,44 @@ coverage/
 *.temp
 *.swp
 
-# Ignore JavaScript files
+# Python virtual environments
+.venv/
+venv/
+env/
+backend-ai/.venv/
+backend-ai/venv/
+**/.venv/
+**/venv/
 
-# Ignore Python files
-*.py
+# Python cache
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
 
-# Ignore Java files
-*.java
-*.class
+# Python build artifacts
+*.egg-info/
+*.egg
+dist/
+build/
+*.dist-info/
+
+# ML model weights (large binary files)
+*.pt
+*.pth
+*.h5
+*.pkl
+*.onnx
+*.bin
+*.weights
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Misc large/generated files
+file_list.txt
+project_report.txt
+url.txt
+yolo11n.pt

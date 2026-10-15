@@ -7,7 +7,7 @@ import { Box, Button, Stack, Typography } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 
-const NumberOfQuestions = ({ questionLength, submitTest, examDurationInSeconds }) => {
+const NumberOfQuestions = ({ questionLength, submitTest, examDurationInSeconds, paused = false }) => {
   const totalQuestions = questionLength;
   const questionNumbers = Array.from({ length: totalQuestions }, (_, index) => index + 1);
 
@@ -31,6 +31,7 @@ const NumberOfQuestions = ({ questionLength, submitTest, examDurationInSeconds }
   }, [examDurationInSeconds]);
 
   useEffect(() => {
+    if (paused) return undefined;
     const timer = setInterval(() => {
       setTimeLeft((prevTime) => {
         if (prevTime <= 1) {
@@ -43,7 +44,7 @@ const NumberOfQuestions = ({ questionLength, submitTest, examDurationInSeconds }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [paused]);
 
   const handleTimeUp = () => {
     toast.warning('Time is up! Submitting your test...');
@@ -63,7 +64,7 @@ const NumberOfQuestions = ({ questionLength, submitTest, examDurationInSeconds }
         <Stack direction="row" alignItems="center" justifyContent="space-between">
           <Typography variant="h6">Questions: 1/{totalQuestions}</Typography>
           <Typography variant="h6">Time Left: {formatTime(timeLeft)}</Typography>
-          <Button variant="contained" onClick={submitTest} color="error">
+          <Button variant="contained" onClick={submitTest} color="error" disabled={paused}>
             Finish Test
           </Button>
         </Stack>

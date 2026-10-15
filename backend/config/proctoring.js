@@ -5,18 +5,19 @@
 const PROCTORING_CONFIG = {
   // ── Penalty Points per Event Type ──────────────────────────────────────────
   penalties: {
-    TAB_SWITCH:           10,
+    TAB_SWITCH:           20,
     WINDOW_BLUR:          5,
-    FULLSCREEN_EXIT:      100,
+    FULLSCREEN_EXIT:      20,
     NO_FACE_DETECTED:     10,
-    MULTIPLE_FACES:       25,
+    MULTIPLE_FACES:       30,
     CELL_PHONE_DETECTED:  25,
     BOOK_DETECTED:        15,
     LAPTOP_DETECTED:      15,
     PROHIBITED_OBJECT:    15,
-    GAZE_DEVIATION:       10,
+    PERSON_IN_BACKGROUND: 15,
+    GAZE_DEVIATION:       12,
     BACKGROUND_NOISE:     5,
-    SPEECH_DETECTED:      10,
+    SPEECH_DETECTED:      20,
     COPY_PASTE:           10,
     RIGHT_CLICK:          5,
     KEYBOARD_SHORTCUT:    10,
@@ -28,11 +29,12 @@ const PROCTORING_CONFIG = {
     WINDOW_BLUR:          'LOW',
     FULLSCREEN_EXIT:      'HIGH',
     NO_FACE_DETECTED:     'MEDIUM',
-    MULTIPLE_FACES:       'HIGH',
-    CELL_PHONE_DETECTED:  'HIGH',
-    BOOK_DETECTED:        'MEDIUM',
+    MULTIPLE_FACES:       'CRITICAL',
+    CELL_PHONE_DETECTED:  'CRITICAL',
+    BOOK_DETECTED:        'HIGH',
     LAPTOP_DETECTED:      'MEDIUM',
     PROHIBITED_OBJECT:    'MEDIUM',
+    PERSON_IN_BACKGROUND: 'HIGH',
     GAZE_DEVIATION:       'LOW',
     BACKGROUND_NOISE:     'LOW',
     SPEECH_DETECTED:      'MEDIUM',
@@ -44,8 +46,9 @@ const PROCTORING_CONFIG = {
   // ── Decision Thresholds ───────────────────────────────────────────────────
   decision: {
     SAFE_MAX:             29,   // 0–29 → SAFE
-    WARNING_MAX:          69,   // 30–69 → WARNING
-    // 70–100 → MALPRACTICE
+    WARNING_MAX:          49,   // 30–49 → WARNING
+    ADMIN_REVIEW_MAX:     59,   // 50–59 → ADMIN_REVIEW
+    // 60–100 → MALPRACTICE
   },
 
   // ── Hybrid Score Weights ──────────────────────────────────────────────────
@@ -91,8 +94,10 @@ const PROCTORING_CONFIG = {
 
   // ── Auto-Termination ──────────────────────────────────────────────────────
   termination: {
-    ENABLED:              true,
-    SCORE_THRESHOLD:      70,   // Score at which exam auto-terminates
+    // AI predictions remain reviewable evidence; only explicit exam policy
+    // rules (such as repeated fullscreen exits) should terminate client-side.
+    ENABLED:              false,
+    SCORE_THRESHOLD:      70,
   },
 
   // ── OTP Config ────────────────────────────────────────────────────────────

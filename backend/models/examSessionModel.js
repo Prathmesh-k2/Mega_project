@@ -61,7 +61,7 @@ const examSessionSchema = new mongoose.Schema(
     // ── Decision ──────────────────────────────────────────────────────────
     classification: {
       type: String,
-      enum: ["SAFE", "WARNING", "MALPRACTICE", "PENDING"],
+      enum: ["SAFE", "WARNING", "ADMIN_REVIEW", "MALPRACTICE", "PENDING"],
       default: "PENDING",
     },
     decisionReason: {

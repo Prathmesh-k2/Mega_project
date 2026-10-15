@@ -9,6 +9,7 @@ import cors from "cors";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { randomUUID } from "crypto";
+import jwt from "jsonwebtoken";
 
 // Route imports
 import userRoutes from "./routes/userRoutes.js";
@@ -55,6 +56,10 @@ app.use((req, res, next) => {
       }
     });
   }
+  
+  // Expose Socket.IO to routes
+  req.io = io;
+  
   next();
 });
 
@@ -94,6 +99,27 @@ const io = new Server(httpServer, {
 });
 
 const sessions = new Map();
+
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || socket.handshake.headers?.cookie?.split("jwt=")[1]?.split(";")[0];
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      socket.user = decoded;
+      
+      // Admins/Teachers join the secure monitoring room
+      if (decoded.role === "admin" || decoded.role === "teacher") {
+        socket.join("admin-monitoring");
+      } else {
+        socket.join(`student_${decoded.userId || decoded.id}`);
+      }
+    } catch (err) {
+      console.warn("Socket JWT Error:", err.message);
+    }
+  }
+  
+  next();
+});
 
 io.on("connection", (socket) => {
   console.log("Socket Connected:", socket.id);

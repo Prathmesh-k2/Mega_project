@@ -9,47 +9,56 @@ import nodemailer from "nodemailer";
 const generateOtpCode = () =>
   Math.floor(100000 + Math.random() * 900000).toString();
 
-const sendOtpEmail = async (email, otpCode) => {
+const sendOtpEmail = async (email, otpCode, purpose = "REGISTRATION") => {
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
 
-  // Fall back to console log if SMTP is not configured
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    console.log(`\n============================`);
-    console.log(`[DEV MODE] OTP for ${email}: ${otpCode}`);
-    console.log(`============================\n`);
-    return;
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(`[DEV MODE] SMTP is not configured; OTP for ${email}: ${otpCode}`);
+      return;
+    }
+    throw new Error("Email delivery is not configured on the server");
   }
 
-  try {
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-    });
+  const port = Number(SMTP_PORT || 587);
+  const transporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port,
+    secure: port === 465,
+    requireTLS: port === 587,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
+    auth: {
+      user: SMTP_USER,
+      // Gmail app passwords are often copied with spaces; SMTP accepts the compact form.
+      pass: SMTP_PASS.replace(/\s/g, ""),
+    },
+  });
 
-    await transporter.sendMail({
-      from: `"AI_Evalu8 System" <${SMTP_USER}>`,
-      to: email,
-      subject: "Your AI_Evalu8 Registration OTP",
-      html: `
-        <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;border:1px solid #e0e0e0;border-radius:8px;">
-          <h2 style="color:#1976d2;text-align:center;">AI_Evalu8</h2>
-          <p style="font-size:16px;color:#333;">Your One-Time Password (OTP) for email verification is:</p>
-          <div style="font-size:36px;font-weight:bold;letter-spacing:8px;text-align:center;color:#1976d2;padding:16px 0;">
-            ${otpCode}
-          </div>
-          <p style="font-size:13px;color:#888;">This code expires in <b>5 minutes</b>. Do not share it with anyone.</p>
+  const subject = purpose === "PASSWORD_RESET"
+    ? "Your AI_Evalu8 password reset OTP"
+    : "Your AI_Evalu8 Registration OTP";
+  const description = purpose === "PASSWORD_RESET"
+    ? "Your One-Time Password (OTP) to reset your AI_Evalu8 password is:"
+    : "Your One-Time Password (OTP) for email verification is:";
+
+  await transporter.sendMail({
+    from: `"AI_Evalu8 System" <${SMTP_USER}>`,
+    to: email,
+    subject,
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;border:1px solid #e0e0e0;border-radius:8px;">
+        <h2 style="color:#1976d2;text-align:center;">AI_Evalu8</h2>
+        <p style="font-size:16px;color:#333;">${description}</p>
+        <div style="font-size:36px;font-weight:bold;letter-spacing:8px;text-align:center;color:#1976d2;padding:16px 0;">
+          ${otpCode}
         </div>
-      `,
-    });
-    console.log(`[EMAIL] OTP sent to ${email} via SMTP`);
-  } catch (smtpError) {
-    // SMTP failed — fall back to console so registration never breaks
-    console.error(`[EMAIL ERROR] SMTP failed: ${smtpError.message}`);
-    console.log(`\n============================`);
-    console.log(`[FALLBACK] OTP for ${email}: ${otpCode}`);
-    console.log(`[FALLBACK] Fix SMTP_PASS in .env to enable email delivery`);
-    console.log(`============================\n`);
-  }
+        <p style="font-size:13px;color:#888;">This code expires in <b>5 minutes</b>. Do not share it with anyone.</p>
+      </div>
+    `,
+  });
+  console.log(`[EMAIL] OTP sent to ${email} via SMTP`);
 };
 
 // ─── Controllers ─────────────────────────────────────────────────────────────
@@ -64,7 +73,8 @@ const sendOtp = asyncHandler(async (req, res) => {
     throw new Error("Email is required");
   }
 
-  const existingUser = await User.findOne({ email });
+  const normalizedEmail = email.trim().toLowerCase();
+  const existingUser = await User.findOne({ email: normalizedEmail });
   if (existingUser) {
     res.status(400);
     throw new Error("An account with this email already exists");
@@ -72,14 +82,24 @@ const sendOtp = asyncHandler(async (req, res) => {
 
   const otpCode = generateOtpCode();
 
-  // Upsert OTP record (replace if already requested)
+  try {
+    await sendOtpEmail(normalizedEmail, otpCode, "REGISTRATION");
+  } catch (smtpError) {
+    console.error("[EMAIL ERROR] OTP delivery failed:", {
+      code: smtpError.code,
+      responseCode: smtpError.responseCode,
+      message: smtpError.message,
+    });
+    res.status(502);
+    throw new Error("OTP email could not be sent. Check the email service configuration and try again.");
+  }
+
+  // Store the OTP only after the provider accepted the message.
   await Otp.findOneAndUpdate(
-    { email },
-    { otp: otpCode, createdAt: new Date() },
+    { email: normalizedEmail },
+    { otp: otpCode, purpose: "REGISTRATION", createdAt: new Date() },
     { upsert: true, new: true }
   );
-
-  await sendOtpEmail(email, otpCode);
 
   res.status(200).json({ message: "OTP sent successfully. Check your email." });
 });
@@ -167,7 +187,8 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new Error("OTP is required. Please verify your email first.");
   }
 
-  const otpRecord = await Otp.findOne({ email });
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  const otpRecord = await Otp.findOne({ email: normalizedEmail, purpose: "REGISTRATION" });
   if (!otpRecord) {
     res.status(400);
     throw new Error("OTP expired or not found. Please request a new OTP.");
@@ -178,10 +199,10 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 
   // OTP valid — clean it up
-  await Otp.deleteOne({ email });
+  await Otp.deleteOne({ email: normalizedEmail, purpose: "REGISTRATION" });
 
   // --- Check duplicate ---
-  const userExist = await User.findOne({ email });
+  const userExist = await User.findOne({ email: normalizedEmail });
   if (userExist) {
     res.status(400);
     throw new Error("User Already Exists");
@@ -190,7 +211,7 @@ const registerUser = asyncHandler(async (req, res) => {
   // Phase 1: ignore client-sent role — public registration is always student
   const user = await User.create({
     name,
-    email,
+    email: normalizedEmail,
     password,
     role: "student",
     isVerified: true,
@@ -206,10 +227,87 @@ const registerUser = asyncHandler(async (req, res) => {
       message:
         "Registration successful! Your account is pending admin approval. You will be able to log in once approved.",
     });
+
   } else {
     res.status(400);
     throw new Error("Invalid User Data");
   }
+});
+
+// @desc Send a password-reset OTP
+// @route POST /api/users/forgot-password
+// @access Public
+const sendPasswordResetOtp = asyncHandler(async (req, res) => {
+  const normalizedEmail = String(req.body.email || "").trim().toLowerCase();
+  if (!normalizedEmail) {
+    res.status(400);
+    throw new Error("Email is required");
+  }
+
+  const user = await User.findOne({ email: normalizedEmail });
+  if (!user) {
+    return res.status(200).json({
+      message: "If an account exists for this email, a password reset OTP has been sent.",
+    });
+  }
+
+  const otpCode = generateOtpCode();
+  try {
+    await sendOtpEmail(normalizedEmail, otpCode, "PASSWORD_RESET");
+  } catch (smtpError) {
+    console.error("[EMAIL ERROR] Password reset OTP delivery failed:", {
+      code: smtpError.code,
+      responseCode: smtpError.responseCode,
+      message: smtpError.message,
+    });
+    res.status(502);
+    throw new Error("Password reset email could not be sent. Please try again later.");
+  }
+
+  await Otp.findOneAndUpdate(
+    { email: normalizedEmail },
+    { otp: otpCode, purpose: "PASSWORD_RESET", createdAt: new Date() },
+    { upsert: true, new: true },
+  );
+
+  res.status(200).json({
+    message: "If an account exists for this email, a password reset OTP has been sent.",
+  });
+});
+
+// @desc Reset a password using a password-reset OTP
+// @route POST /api/users/reset-password
+// @access Public
+const resetPassword = asyncHandler(async (req, res) => {
+  const normalizedEmail = String(req.body.email || "").trim().toLowerCase();
+  const otp = String(req.body.otp || "").trim();
+  const password = String(req.body.password || "");
+
+  if (!normalizedEmail || !/^\d{6}$/.test(otp) || password.length < 6) {
+    res.status(400);
+    throw new Error("Email, a valid 6-digit OTP, and a password of at least 6 characters are required");
+  }
+
+  const otpRecord = await Otp.findOne({
+    email: normalizedEmail,
+    otp,
+    purpose: "PASSWORD_RESET",
+  });
+  if (!otpRecord) {
+    res.status(400);
+    throw new Error("Invalid or expired password reset OTP");
+  }
+
+  const user = await User.findOne({ email: normalizedEmail });
+  if (!user) {
+    res.status(400);
+    throw new Error("Invalid or expired password reset OTP");
+  }
+
+  user.password = password;
+  await user.save();
+  await Otp.deleteOne({ _id: otpRecord._id });
+  res.status(200).json({ message: "Password reset successfully. You can now sign in." });
 });
 
 // @desc    Logout user
@@ -314,6 +412,8 @@ export {
   getUserProfile,
   updateUserProfile,
   sendOtp,
+  sendPasswordResetOtp,
+  resetPassword,
   getPendingUsers,
   approveUser,
   rejectUser,
