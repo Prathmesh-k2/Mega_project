@@ -47,6 +47,7 @@ const violationEventSchema = new mongoose.Schema(
         "BACKGROUND_NOISE",
         "SPEECH_DETECTED",
         "EXAM_TERMINATED",
+        "CAMERA_UNAVAILABLE",
       ],
     },
     timestamp: {
@@ -68,6 +69,18 @@ const violationEventSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    decisionStatus: {
+      type: String,
+      enum: ["SAFE", "WARNING", "REVIEW_REQUIRED", "VIOLATION_CONFIRMED", "TERMINATED"],
+    },
+    decisionReason: {
+      type: String,
+      default: "",
+    },
+    riskScoreBefore: { type: Number, min: 0, max: 100 },
+    riskScoreAfter: { type: Number, min: 0, max: 100 },
+    reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    reviewedAt: { type: Date },
     description: {
       type: String,
       default: "",

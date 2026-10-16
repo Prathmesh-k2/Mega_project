@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Box, Grid, CircularProgress, Typography } from '@mui/material';
+import { Box, Grid, CircularProgress, Typography, Button } from '@mui/material';
 import PageContainer from 'src/components/container/PageContainer';
 import BlankCard from 'src/components/shared/BlankCard';
 import MultipleChoiceQuestion from './Components/MultipleChoiceQuestion';
 import NumberOfQuestions from './Components/NumberOfQuestions';
 import ProctoringManager from './Components/ProctoringManager';
 import ExamCameraSetup from './ExamCameraSetup';
+import WebCam from './Components/WebCam';
 import { useGetExamsQuery, useGetQuestionsQuery } from '../../slices/examApiSlice';
 import {
   useStartSessionMutation,
@@ -17,7 +18,7 @@ import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 
 const TestPage = () => {
-  const { examId, testId } = useParams();
+  const { examId } = useParams();
   const [selectedExam, setSelectedExam] = useState(null);
   const [examDurationInSeconds, setExamDurationInSeconds] = useState(0);
   const { data: userExamdata, isLoading: isExamsLoading } = useGetExamsQuery();
@@ -28,15 +29,18 @@ const TestPage = () => {
   const [terminateSessionMutation] = useTerminateSessionMutation();
   
   const [sessionId, setSessionId] = useState(null);
+  const [initialFullscreenExitCount, setInitialFullscreenExitCount] = useState(0);
   const [isExamActive, setIsExamActive] = useState(false);
   const webcamRef = useRef(null);
   const mobileVideoRef = useRef(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isMcqCompleted, setIsMcqCompleted] = useState(false);
 
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const [isMobileSetupComplete, setIsMobileSetupComplete] = useState(false);
+  const [laptopCameraReady, setLaptopCameraReady] = useState(false);
+  const [laptopCameraError, setLaptopCameraError] = useState('');
+  const [cameraRetryKey, setCameraRetryKey] = useState(0);
   const [permissionsError, setPermissionsError] = useState('');
   const [isFullscreenRecovery, setIsFullscreenRecovery] = useState(false);
 
@@ -95,6 +99,11 @@ const TestPage = () => {
         }).unwrap();
         
         setSessionId(res.session._id);
+        setInitialFullscreenExitCount(res.session.violationSummary?.fullscreenExitCount || 0);
+        const savedAnswers = res.session.answers instanceof Map
+          ? Object.fromEntries(res.session.answers)
+          : (res.session.answers || {});
+        setAnswers(savedAnswers);
         
         if (res.session.status === 'TERMINATED' || res.session.status === 'COMPLETED') {
            toast.error('This exam session is permanently locked (Terminated/Completed).');
@@ -128,20 +137,17 @@ const TestPage = () => {
   ]);
 
   const [questions, setQuestions] = useState([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [answers, setAnswers] = useState({});
   const { data, isLoading } = useGetQuestionsQuery(examId);
-  const [score, setScore] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
     if (data) {
       setQuestions(data);
+      setCurrentQuestionIndex((index) => Math.min(index, Math.max(data.length - 1, 0)));
     }
   }, [data]);
-
-  const handleMcqCompletion = () => {
-    // Bypass the coding test and just submit
-    handleTestSubmission();
-  };
 
   const handleTestSubmission = async () => {
     if (isSubmitting || !sessionId) return; // Prevent multiple submissions
@@ -150,7 +156,7 @@ const TestPage = () => {
       setIsSubmitting(true);
       setIsExamActive(false);
 
-      const result = await submitSessionMutation({ sessionId, answers: {} }).unwrap();
+      const result = await submitSessionMutation({ sessionId, answers }).unwrap();
       console.log('Session submitted:', result);
 
       toast.success('Test submitted successfully!');
@@ -177,10 +183,6 @@ const TestPage = () => {
       }
     }
     navigate(`/exam/${examId}/report/${sessionId}`);
-  };
-
-  const saveUserTestScore = () => {
-    setScore(score + 1);
   };
 
   if (isExamsLoading) {
@@ -239,12 +241,46 @@ const TestPage = () => {
     return (
       <PageContainer title="Hardware Setup" description="Mobile Camera Setup">
         <Box pt="3rem" display="flex" justifyContent="center">
-          <ExamCameraSetup
-            sessionId={sessionId} 
-            mobileVideoRef={mobileVideoRef}
-            isSetupComplete={false} 
-            onSetupSuccess={() => setIsMobileSetupComplete(true)} 
-          />
+          <Grid container spacing={3} sx={{ width: '100%', maxWidth: 1200 }}>
+            <Grid item xs={12} md={6}>
+              <BlankCard>
+                <Box p={3}>
+                  <Typography variant="h5" mb={2}>Step 1: Check laptop camera</Typography>
+                  <WebCam
+                    key={cameraRetryKey}
+                    webcamRef={webcamRef}
+                    isActive={false}
+                    onCameraReady={() => { setLaptopCameraReady(true); setLaptopCameraError(''); }}
+                    onCameraError={(error) => {
+                      setLaptopCameraReady(false);
+                      setLaptopCameraError(error?.name === 'NotAllowedError'
+                        ? 'Allow camera access in your browser, then reload this page.'
+                        : 'Laptop camera could not start. Check that it is connected and not in use by another app.');
+                    }}
+                  />
+                  <Typography mt={2} color={laptopCameraReady ? 'success.main' : 'text.secondary'}>
+                    {laptopCameraReady ? 'Laptop camera ready' : 'Waiting for laptop camera…'}
+                  </Typography>
+                  {laptopCameraError && <Typography color="error" role="alert">{laptopCameraError}</Typography>}
+                  {laptopCameraError && (
+                    <Button sx={{ mt: 1 }} onClick={() => setCameraRetryKey((key) => key + 1)}>
+                      Retry laptop camera
+                    </Button>
+                  )}
+                </Box>
+              </BlankCard>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <ExamCameraSetup
+                sessionId={sessionId}
+                mobileVideoRef={mobileVideoRef}
+                isSetupComplete={false}
+                laptopCameraReady={laptopCameraReady}
+                roughPaperAllowed={selectedExam?.settings?.roughPaperAllowed !== false}
+                onSetupSuccess={() => setIsMobileSetupComplete(true)}
+              />
+            </Grid>
+          </Grid>
         </Box>
       </PageContainer>
     );
@@ -256,7 +292,7 @@ const TestPage = () => {
       <Box pt="3rem">
         <Grid container spacing={3}>
           {/* LEFT: NAVIGATION & TIMER */}
-          <Grid item xs={12} md={2} lg={2}>
+          <Grid item xs={12} md={3} lg={3}>
             <Grid container spacing={3}>
               <Grid item xs={12}>
                 <BlankCard>
@@ -273,7 +309,10 @@ const TestPage = () => {
                     }}
                   >
                     <NumberOfQuestions
-                      questionLength={questions.length}
+                      questions={questions}
+                      answers={answers}
+                      currentQuestionIndex={currentQuestionIndex}
+                      onQuestionSelect={setCurrentQuestionIndex}
                       submitTest={handleTestSubmission}
                       examDurationInSeconds={examDurationInSeconds}
                       paused={isFullscreenRecovery}
@@ -281,11 +320,44 @@ const TestPage = () => {
                   </Box>
                 </BlankCard>
               </Grid>
+              <Grid item xs={12}>
+                <BlankCard>
+                  <Box p={2}>
+                    <ExamCameraSetup
+                      sessionId={sessionId}
+                      mobileVideoRef={mobileVideoRef}
+                      isSetupComplete={true}
+                      roughPaperAllowed={selectedExam?.settings?.roughPaperAllowed !== false}
+                      onSetupSuccess={() => {}}
+                    />
+                  </Box>
+                </BlankCard>
+              </Grid>
+              <Grid item xs={12}>
+                <BlankCard>
+                  <Box sx={{ width: '100%', minHeight: 150, p: 1 }}>
+                    <Typography variant="caption" color="primary" gutterBottom align="center" display="block">
+                      <b>Face Camera</b>
+                    </Typography>
+                    <ProctoringManager
+                      initialFullscreenExitCount={initialFullscreenExitCount}
+                      sessionId={sessionId}
+                      examId={examId}
+                      webcamRef={webcamRef}
+                      mobileVideoRef={mobileVideoRef}
+                      roughPaperAllowed={selectedExam?.settings?.roughPaperAllowed !== false}
+                      isActive={isExamActive}
+                      onTerminate={handleTerminate}
+                      onFullscreenRecoveryChange={setIsFullscreenRecovery}
+                    />
+                  </Box>
+                </BlankCard>
+              </Grid>
             </Grid>
           </Grid>
 
-          {/* CENTER: EXAM QUESTIONS */}
-          <Grid item xs={12} md={8} lg={8}>
+          {/* EXAM QUESTIONS */}
+          <Grid item xs={12} md={9} lg={9}>
             <BlankCard>
               <Box
                 width="100%"
@@ -300,10 +372,11 @@ const TestPage = () => {
                   <CircularProgress />
                 ) : (
                   <MultipleChoiceQuestion
-                    submitTest={handleTestSubmission}
                     questions={questions}
-                    saveUserTestScore={saveUserTestScore}
-                    sessionId={sessionId}
+                    currentQuestionIndex={currentQuestionIndex}
+                    setCurrentQuestionIndex={setCurrentQuestionIndex}
+                    answers={answers}
+                    setAnswers={setAnswers}
                     disabled={isFullscreenRecovery}
                   />
                 )}
@@ -311,46 +384,6 @@ const TestPage = () => {
             </BlankCard>
           </Grid>
 
-          {/* RIGHT: CAMERA FEEDS (MOBILE & LAPTOP) */}
-          <Grid item xs={12} md={2} lg={2}>
-            <Grid container spacing={3}>
-              <Grid item xs={12}>
-                <BlankCard>
-                  <Box p={2}>
-                    <ExamCameraSetup 
-                      sessionId={sessionId} 
-                      mobileVideoRef={mobileVideoRef}
-                      isSetupComplete={true} 
-                      onSetupSuccess={() => {}} 
-                    />
-                  </Box>
-                </BlankCard>
-              </Grid>
-              
-              <Grid item xs={12}>
-                <BlankCard>
-                  <Box
-                    sx={{ width: '100%', height: 'auto', minHeight: 200, p: 2 }}
-                    display="flex"
-                    alignItems="center"
-                    justifyContent="center"
-                    flexDirection="column"
-                  >
-                    <Typography variant="caption" color="primary" gutterBottom align="center"><b>Laptop Camera Feed</b></Typography>
-                    <ProctoringManager 
-                       sessionId={sessionId} 
-                       examId={examId}
-                       webcamRef={webcamRef} 
-                       mobileVideoRef={mobileVideoRef}
-                       isActive={isExamActive} 
-                       onTerminate={handleTerminate} 
-                       onFullscreenRecoveryChange={setIsFullscreenRecovery}
-                    />
-                  </Box>
-                </BlankCard>
-              </Grid>
-            </Grid>
-          </Grid>
         </Grid>
       </Box>
     </PageContainer>

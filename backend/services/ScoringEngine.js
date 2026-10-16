@@ -3,6 +3,7 @@
 // Classifies sessions as SAFE / WARNING / MALPRACTICE.
 
 import PROCTORING_CONFIG from "../config/proctoring.js";
+import { isConfirmedViolation } from "./ProctoringPolicy.js";
 
 /**
  * Calculate total penalty from an array of violation events.
@@ -12,7 +13,7 @@ export function calculateEventScore(violations) {
   if (!violations || violations.length === 0) return 0;
 
   let totalPenalty = 0;
-  for (const v of violations) {
+  for (const v of violations.filter(isConfirmedViolation)) {
     totalPenalty += v.penaltyPoints || 0;
   }
   // Clamp to 0–100
@@ -33,15 +34,17 @@ export function calculateAIBehaviorScore(violations) {
 
   // ── Feature 1: Frequency (violations per minute) ──────────────────
   let frequencyScore = 0;
-  if (violations.length >= 2) {
-    const timestamps = violations.map((v) => new Date(v.timestamp).getTime());
-    const durationMs = Math.max(timestamps) - Math.min(timestamps);
+  const timestamps = violations
+    .map((v) => new Date(v.timestamp).getTime())
+    .filter(Number.isFinite);
+  if (timestamps.length >= 2) {
+    const durationMs = Math.max(...timestamps) - Math.min(...timestamps);
     const durationMin = Math.max(durationMs / 60000, 1);
     const vpm = violations.length / durationMin;
     // 0-2 vpm = low, 5+ vpm = high
     frequencyScore = Math.min(100, (vpm / 5) * 100);
   } else {
-    frequencyScore = violations.length * 15;
+    frequencyScore = Math.min(100, violations.length * 15);
   }
 
   // ── Feature 2: Severity distribution ──────────────────────────────
@@ -105,6 +108,17 @@ export function calculateFairnessScore(hybridScore) {
   return Math.max(0, 100 - hybridScore);
 }
 
+export function deduplicateEvents(events = []) {
+  const seen = new Set();
+  return events.filter((event) => {
+    const key = event.eventId || event._id?.toString();
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function classifyStatus(hybridScore, violations = []) {
   const { SAFE_MAX, WARNING_MAX, ADMIN_REVIEW_MAX } = PROCTORING_CONFIG.decision;
 
@@ -113,7 +127,7 @@ export function classifyStatus(hybridScore, violations = []) {
   // Build specific reason for violations
   const types = {};
   let fullscreenExitCount = 0;
-  for (const v of violations) {
+  for (const v of violations.filter(isConfirmedViolation)) {
     types[v.eventType] = (types[v.eventType] || 0) + 1;
     if (v.eventType === 'FULLSCREEN_EXIT') fullscreenExitCount++;
   }
@@ -160,18 +174,20 @@ export function classifyStatus(hybridScore, violations = []) {
  * Full scoring pipeline: takes violations array, returns complete scoring result.
  */
 export function calculateFullScore(violations) {
-  const eventScore = calculateEventScore(violations);
-  const aiScore = calculateAIBehaviorScore(violations);
+  const uniqueEvents = deduplicateEvents(violations);
+  const confirmedViolations = uniqueEvents.filter(isConfirmedViolation);
+  const eventScore = calculateEventScore(confirmedViolations);
+  const aiScore = calculateAIBehaviorScore(confirmedViolations);
   const hybridScore = calculateHybridScore(eventScore, aiScore);
-  const fairnessScore = calculateFairnessScore(hybridScore);
-  const decision = classifyStatus(hybridScore, violations);
+  const decision = classifyStatus(hybridScore, uniqueEvents);
 
   return {
     eventScore,
     aiScore,
     hybridScore: decision.score,
     fairnessScore: calculateFairnessScore(decision.score),
-    totalPenalties: violations.reduce(
+    totalViolations: confirmedViolations.length,
+    totalPenalties: confirmedViolations.reduce(
       (sum, v) => sum + (v.penaltyPoints || 0),
       0
     ),

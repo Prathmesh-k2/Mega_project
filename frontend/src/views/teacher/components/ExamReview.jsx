@@ -8,7 +8,7 @@ const ExamReview = ({ examDetails, questions, onSaveDraft, onPublish, onEditQues
         Exam Review
       </Typography>
       
-      <Paper variant="outlined" sx={{ p: 3, mb: 4, backgroundColor: 'primary.light', color: 'primary.contrastText' }}>
+      <Paper variant="outlined" sx={{ p: 3, mb: 4, backgroundColor: 'primary.light', color: 'text.primary' }}>
         <Typography variant="h5" mb={2}>Exam Details</Typography>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={4}>
           <Box flex={1}>
@@ -39,6 +39,7 @@ const ExamReview = ({ examDetails, questions, onSaveDraft, onPublish, onEditQues
       <Stack spacing={2} mb={4}>
         {questions.map((q, idx) => {
           if (!q) return null;
+          const correctAnswer = q.correctAnswer || q.options?.find((option) => option?.isCorrect)?.optionText;
           return (
           <Paper key={idx} variant="outlined" sx={{ p: 2 }}>
             <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
@@ -52,16 +53,20 @@ const ExamReview = ({ examDetails, questions, onSaveDraft, onPublish, onEditQues
             </Box>
             
             <Box pl={2} mb={2}>
-              {q.options?.map((opt, oIdx) => (
+              {q.options?.map((opt, oIdx) => {
+                const optionText = typeof opt === 'string' ? opt : opt.optionText;
+                const isCorrect = optionText === correctAnswer;
+                return (
                 <Typography
                   key={oIdx}
                   variant="body2"
-                  color={opt === (q.correctAnswer || (q.options.find(o => o.isCorrect)?.optionText)) ? "success.main" : "textSecondary"}
-                  fontWeight={opt === (q.correctAnswer || (q.options.find(o => o.isCorrect)?.optionText)) ? "bold" : "normal"}
+                  color={isCorrect ? "success.main" : "textSecondary"}
+                  fontWeight={isCorrect ? "bold" : "normal"}
                 >
-                  {String.fromCharCode(65 + oIdx)}. {typeof opt === 'string' ? opt : opt.optionText} {opt === (q.correctAnswer || (q.options.find(o => o.isCorrect)?.optionText)) && "✓"}
+                  {String.fromCharCode(65 + oIdx)}. {optionText} {isCorrect && "✓"}
                 </Typography>
-              ))}
+                );
+              })}
             </Box>
             
             <Box display="flex" justifyContent="space-between" alignItems="center">

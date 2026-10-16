@@ -6,7 +6,7 @@
  *   - ViolationAlert (premium warning popups + termination modal)
  *
  * Sends structured violation events to the backend API.
- * Enforces auto-termination on score threshold OR 3 fullscreen exits.
+ * Records monitoring signals and enforces the configured fullscreen exit policy.
  */
 import React, { useCallback, useRef, useState, useEffect } from 'react';
 import { Box, Chip, Stack, Typography } from '@mui/material';
@@ -36,6 +36,8 @@ export default function ProctoringManager({
   cheatingLog,
   updateCheatingLog,
   onFullscreenRecoveryChange,
+  roughPaperAllowed = true,
+  initialFullscreenExitCount = 0,
 }) {
   const [currentScore, setCurrentScore]           = useState(0);
   const [classification, setClassification]       = useState('SAFE');
@@ -44,17 +46,19 @@ export default function ProctoringManager({
   const [terminationReason, setTerminationReason] = useState('');
   const [violationCounts, setViolationCounts]     = useState({});
   const [latestViolation, setLatestViolation]     = useState(null);
-  const [fullscreenExitCount, setFullscreenExitCount] = useState(0);
+  const [fullscreenExitCount, setFullscreenExitCount] = useState(initialFullscreenExitCount);
   const [fullscreenRecoverySeconds, setFullscreenRecoverySeconds] = useState(0);
   const [cameraError, setCameraError] = useState('');
 
   const isTerminatedRef = useRef(false);  // ref for use inside closures
   const recoveryTimerRef = useRef(null);
   const recoveryDeadlineRef = useRef(0);
+  const fullscreenExitCountRef = useRef(initialFullscreenExitCount);
   const eventQueueRef = useRef([]);
   const flushingQueueRef = useRef(false);
   const outageNotifiedRef = useRef(false);
   const evidenceCooldownRef = useRef(new Map());
+  const cameraOutageNotifiedRef = useRef(false);
 
   const stopRecoveryTimer = useCallback(() => {
     if (recoveryTimerRef.current) {
@@ -68,11 +72,24 @@ export default function ProctoringManager({
 
   // ── Utility: request fullscreen ──────────────────────────────────────
   const requestFullscreen = useCallback(() => {
+    const el = document.documentElement;
+    const request = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if (!request) {
+      toast.error('This browser does not support fullscreen mode.');
+      return;
+    }
     try {
-      const el = document.documentElement;
-      if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
-      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-    } catch (_) {}
+      const result = request.call(el);
+      if (result?.catch) {
+        result.catch((error) => {
+          console.warn('[Proctoring] Fullscreen request was rejected:', error);
+          toast.error('Fullscreen was blocked. Click the button again and allow fullscreen in your browser.');
+        });
+      }
+    } catch (error) {
+      console.warn('[Proctoring] Fullscreen request failed:', error);
+      toast.error('Fullscreen could not be enabled. Please use the browser fullscreen control and retry.');
+    }
   }, []);
 
   // ── Core termination handler ─────────────────────────────────────────
@@ -178,7 +195,11 @@ export default function ProctoringManager({
       setFullscreenRecoverySeconds(remaining);
       if (remaining === 0) {
         stopRecoveryTimer();
-        terminate('Exam terminated: fullscreen was not restored within 10 seconds.');
+        if (fullscreenExitCountRef.current >= PROCTORING_CONFIG.FULLSCREEN_MAX_EXITS) {
+          terminate(`Exam terminated after ${fullscreenExitCountRef.current} fullscreen exits without recovery.`);
+        } else {
+          toast.warning('Please return to fullscreen. This exit was recorded; the exam remains active.');
+        }
       }
     }, 250);
   }, [onFullscreenRecoveryChange, stopRecoveryTimer, terminate]);
@@ -201,11 +222,20 @@ export default function ProctoringManager({
 
       // Update local fullscreen counter when BrowserMonitor fires FULLSCREEN_EXIT
       if (violation.eventType === 'FULLSCREEN_EXIT' && violation.metadata?.exitNumber) {
+        fullscreenExitCountRef.current = violation.metadata.exitNumber;
         setFullscreenExitCount(violation.metadata.exitNumber);
       }
 
       // Update latest violation for the ViolationAlert component
-      setLatestViolation({ ...violation, _ts: Date.now() });
+      const reviewEvents = new Set([
+        'NO_FACE_DETECTED', 'MULTIPLE_FACES', 'CELL_PHONE_DETECTED',
+        'BOOK_DETECTED', 'PROHIBITED_OBJECT', 'PERSON_IN_BACKGROUND', 'GAZE_DEVIATION',
+      ]);
+      setLatestViolation({
+        ...violation,
+        decisionStatus: violation.decisionStatus || (reviewEvents.has(violation.eventType) ? 'REVIEW_REQUIRED' : 'WARNING'),
+        _ts: Date.now(),
+      });
 
       const eventId = violation.eventId || `${sessionId}:${violation.eventType}:${violation._ts || Date.now()}`;
       if (eventQueueRef.current.some((item) => item.payload.eventId === eventId)) return;
@@ -216,7 +246,7 @@ export default function ProctoringManager({
           eventId,
           sessionId,
           eventType: violation.eventType,
-          confidence: violation.confidence || 1.0,
+          confidence: violation.confidence ?? 1.0,
           description: violation.description || '',
           metadata: {
             ...(violation.metadata || {}),
@@ -243,6 +273,21 @@ export default function ProctoringManager({
     [sessionId, isActive, cheatingLog, updateCheatingLog, examId, flushEvents],
   );
 
+  const reportCameraUnavailable = useCallback((description, reason) => {
+    if (cameraOutageNotifiedRef.current) return;
+    cameraOutageNotifiedRef.current = true;
+    setCameraError(description);
+    handleViolation({
+      eventType: 'CAMERA_UNAVAILABLE',
+      decisionStatus: 'WARNING',
+      confidence: 0,
+      description,
+      cameraSource: 'laptop',
+      metadata: { source: 'Face Camera', cameraSource: 'laptop', reason },
+      _ts: Date.now(),
+    });
+  }, [handleViolation]);
+
   // ── Listen for External Violations (Mobile Camera via custom DOM event) ──
   useEffect(() => {
     const handleExternalViolation = (e) => {
@@ -261,6 +306,7 @@ export default function ProctoringManager({
   };
 
   const getStatusIcon = () => {
+    if (isTerminated) return <ErrorIcon fontSize="small" />;
     if (classification === 'SAFE')    return <SafeIcon fontSize="small" />;
     if (classification === 'WARNING') return <WarningIcon fontSize="small" />;
     return <ErrorIcon fontSize="small" />;
@@ -273,6 +319,7 @@ export default function ProctoringManager({
     <>
       {/* ── Invisible monitors ──────────────────────────────────── */}
       <BrowserMonitor
+        initialFullscreenExitCount={initialFullscreenExitCount}
         onViolation={handleViolation}
         isActive={isActive && !isTerminated}
         onFullscreenExit={beginFullscreenRecovery}
@@ -296,27 +343,21 @@ export default function ProctoringManager({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
           <CameraIcon sx={{ fontSize: '0.85rem', color: 'primary.main' }} />
           <Typography variant="caption" color="primary" fontWeight={700} fontSize="0.7rem">
-            Laptop Camera
+            Face Camera
           </Typography>
         </Box>
         <WebCam
           webcamRef={webcamRef}
+          roughPaperAllowed={roughPaperAllowed}
           onViolation={handleViolation}
           isActive={isActive && !isTerminated}
           onCameraReady={(stream) => {
+            cameraOutageNotifiedRef.current = false;
             setCameraError('');
             if (process.env.NODE_ENV !== 'production') console.debug('[Proctoring] Camera initialized');
             stream?.getVideoTracks?.().forEach((track) => {
               track.onended = () => {
-                const violation = {
-                  eventType: 'NO_FACE_DETECTED',
-                  confidence: 1,
-                  description: 'Camera disconnected during the exam.',
-                  metadata: { source: 'Laptop Webcam', reason: 'track-ended' },
-                  _ts: Date.now(),
-                };
-                setCameraError('Camera disconnected. Reconnect it immediately to continue.');
-                handleViolation(violation);
+                reportCameraUnavailable('Face camera disconnected. Restore camera access to continue.', 'track-ended');
               };
             });
           }}
@@ -324,7 +365,7 @@ export default function ProctoringManager({
             const message = error?.name === 'NotAllowedError'
               ? 'Camera permission was denied. Allow camera access to continue the exam.'
               : 'Camera could not be initialized. Please reconnect it and try again.';
-            setCameraError(message);
+            reportCameraUnavailable(message, error?.name || 'initialization-failed');
             console.error('[Proctoring] Camera initialization failed:', error);
           }}
         />
@@ -345,7 +386,7 @@ export default function ProctoringManager({
           />
           <Chip
             icon={getStatusIcon()}
-            label={classification}
+            label={isTerminated ? 'TERMINATED' : classification}
             color={getStatusColor()}
             size="small"
             variant="outlined"
@@ -355,7 +396,7 @@ export default function ProctoringManager({
 
         <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ mt: 0.5, gap: 0.5 }}>
           <Chip
-            label={`Violations: ${totalViolations}`}
+            label={`Signals: ${totalViolations}`}
             color={totalViolations > 5 ? 'error' : totalViolations > 0 ? 'warning' : 'default'}
             size="small"
             sx={{ fontSize: '0.65rem' }}
@@ -374,7 +415,7 @@ export default function ProctoringManager({
         {totalViolations > 0 && (
           <Box sx={{ mt: 1, p: 1, border: '1px solid #ffcccc', borderRadius: 1, backgroundColor: '#fff5f5' }}>
             <Typography variant="caption" fontWeight="bold" color="error" display="block" mb={0.5}>
-              Malpractice Log
+              Monitoring Signals
             </Typography>
             <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ gap: 0.5 }}>
               {Object.entries(violationCounts).map(([key, count]) =>

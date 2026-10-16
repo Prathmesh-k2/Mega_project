@@ -55,6 +55,7 @@ const CreateExamPage = () => {
       duration: 30,
       liveDate: '',
       deadDate: '',
+      settings: { roughPaperAllowed: true },
     },
     validationSchema: examValidationSchema,
     onSubmit: async (values) => {

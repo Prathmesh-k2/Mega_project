@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Typography, Button, Stack } from '@mui/material';
+import { Box, Typography, Button, Stack, FormControlLabel, Checkbox } from '@mui/material';
 import CustomTextField from '../../../components/forms/theme-elements/CustomTextField';
 
 const ExamForm = ({ formik, title, onSubmitForm, isSaving }) => {
@@ -71,6 +71,17 @@ const ExamForm = ({ formik, title, onSubmitForm, isSaving }) => {
             helperText={touched.duration && errors.duration}
           />
         </Stack>
+
+        <FormControlLabel
+          control={(
+            <Checkbox
+              name="settings.roughPaperAllowed"
+              checked={values.settings?.roughPaperAllowed !== false}
+              onChange={(event) => formik.setFieldValue('settings.roughPaperAllowed', event.target.checked)}
+            />
+          )}
+          label="Allow rough paper or a notebook"
+        />
 
         <Stack direction="row" spacing={3}>
           <CustomTextField

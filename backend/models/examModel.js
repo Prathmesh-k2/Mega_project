@@ -59,6 +59,7 @@ const examSchema = mongoose.Schema(
       negativeMarking: { type: Boolean, default: false },
       negativeMarks: { type: Number, default: 0 },
       oneAttempt: { type: Boolean, default: true },
+      roughPaperAllowed: { type: Boolean, default: true },
     },
     // Define examId field with UUID generation
     examId: {

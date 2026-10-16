@@ -60,7 +60,7 @@ function AlertBanner({ alert, onDismiss }) {
       <div style={styles.content}>
         <div style={styles.header}>
           <span style={{ ...styles.label, color: meta.color }}>{meta.label}</span>
-          <span style={styles.badge}>VIOLATION</span>
+          <span style={styles.badge}>{alert.decisionStatus || 'WARNING'}</span>
         </div>
         <p style={styles.description}>{alert.description}</p>
         <div style={styles.footer}>
@@ -118,15 +118,13 @@ function FullscreenWarning({ count, secondsRemaining, onReturnFullscreen }) {
         <strong>Fullscreen Required!</strong>
         <br />
         <span style={{ fontSize: '0.8rem' }}>
-          You have exited fullscreen {count}/3 times. Return within{' '}
-          <strong>{secondsRemaining}s</strong> or the exam will be terminated.
+          Fullscreen exit {count}/3. Return within{' '}
+          <strong>{secondsRemaining}s</strong> to continue. Repeated exits may require review.
         </span>
       </div>
-      {count < 3 && (
-        <button style={styles.fsBtn} onClick={onReturnFullscreen}>
-          Return to Fullscreen
-        </button>
-      )}
+      <button type="button" style={styles.fsBtn} onClick={onReturnFullscreen}>
+        Return to Fullscreen
+      </button>
     </div>
   );
 }
@@ -144,7 +142,6 @@ export default function ViolationAlert({
   onReturnFullscreen,  // callback to re-enter fullscreen
 }) {
   const [alerts, setAlerts] = useState([]);
-  const [showFsWarning, setShowFsWarning] = useState(false);
 
   // Add new alert whenever a violation fires (keyed by timestamp so same type re-fires)
   useEffect(() => {
@@ -158,15 +155,6 @@ export default function ViolationAlert({
     };
     setAlerts((prev) => [newAlert, ...prev].slice(0, 4)); // max 4 stacked
   }, [violation?._ts]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Show fullscreen warning when exits happen
-  useEffect(() => {
-    if (fullscreenExitCount > 0) {
-      setShowFsWarning(true);
-      const t = setTimeout(() => setShowFsWarning(false), 6000);
-      return () => clearTimeout(t);
-    }
-  }, [fullscreenExitCount]);
 
   const dismiss = useCallback((id) => {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
@@ -182,7 +170,7 @@ export default function ViolationAlert({
       </div>
 
       {/* Fullscreen sticky warning */}
-      {showFsWarning && (
+      {fullscreenExitCount > 0 && fullscreenRecoverySeconds > 0 && !document.fullscreenElement && (
         <FullscreenWarning
           count={fullscreenExitCount}
           secondsRemaining={fullscreenRecoverySeconds}

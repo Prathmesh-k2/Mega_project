@@ -1,8 +1,11 @@
 import asyncHandler from "express-async-handler";
 import ViolationEvent from "../models/violationEventModel.js";
 import ExamSession from "../models/examSessionModel.js";
+import Exam from "../models/examModel.js";
 import PROCTORING_CONFIG from "../config/proctoring.js";
 import { calculateFullScore } from "../services/ScoringEngine.js";
+import { classifyProctoringEvent } from "../services/ProctoringPolicy.js";
+import { isConfirmedViolation } from "../services/ProctoringPolicy.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -31,6 +34,12 @@ const logViolation = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error("sessionId and eventType are required");
   }
+  const validEventTypes = ViolationEvent.schema.path("eventType").enumValues;
+  if (!validEventTypes.includes(eventType)) {
+    res.status(400);
+    throw new Error("Unsupported proctoring event type");
+  }
+
   if (eventId) {
     const existing = await ViolationEvent.findOne({ eventId });
     if (existing) {
@@ -60,9 +69,22 @@ const logViolation = asyncHandler(async (req, res) => {
     });
   }
 
-  // Get penalty and severity from config
-  const penaltyPoints = PROCTORING_CONFIG.penalties[eventType] || 0;
-  const severity = PROCTORING_CONFIG.severity[eventType] || "LOW";
+  const exam = await Exam.findOne({ examId: session.examId }).select("settings").lean();
+  const decision = classifyProctoringEvent(eventType, { examSettings: exam?.settings || {} });
+  const sourceValues = new Set(["laptop", "mobile", "browser", "microphone"]);
+  const providedSource = metadata?.cameraSource || metadata?.source;
+  const cameraSource = sourceValues.has(providedSource) ? providedSource : "unknown";
+  const confidenceValue = Number(confidence);
+  const eventConfidence = Number.isFinite(confidenceValue)
+    ? Math.min(1, Math.max(0, confidenceValue))
+    : 0;
+  const riskScoreBefore = session.hybridScore || 0;
+  const penaltyPoints = decision.status === "VIOLATION_CONFIRMED"
+    ? (PROCTORING_CONFIG.penalties[eventType] || 0)
+    : 0;
+  const severity = decision.status === "REVIEW_REQUIRED"
+    ? (PROCTORING_CONFIG.severity[eventType] || "MEDIUM")
+    : (PROCTORING_CONFIG.severity[eventType] || "LOW");
 
   // Create violation event
   const violation = await ViolationEvent.create({
@@ -72,14 +94,17 @@ const logViolation = asyncHandler(async (req, res) => {
     examId: session.examId,
     eventType,
     severity,
-    confidence: confidence || 1.0,
+    confidence: eventConfidence,
     penaltyPoints,
     description: description || `${eventType} detected`,
+    decisionStatus: decision.status,
+    decisionReason: decision.reason,
+    riskScoreBefore,
     evidencePath: evidencePath || "",
     evidenceStatus: ["NO_FACE_DETECTED", "MULTIPLE_FACES", "CELL_PHONE_DETECTED", "BOOK_DETECTED", "PERSON_IN_BACKGROUND", "PROHIBITED_OBJECT", "BACKGROUND_NOISE"].includes(eventType)
       ? "PENDING"
       : "NOT_APPLICABLE",
-    metadata: metadata || {},
+    metadata: { ...(metadata || {}), cameraSource },
   });
 
   // Update session violation summary
@@ -88,21 +113,30 @@ const logViolation = asyncHandler(async (req, res) => {
     session.violationSummary[summaryKey] =
       (session.violationSummary[summaryKey] || 0) + 1;
   }
-  session.totalViolations = (session.totalViolations || 0) + 1;
 
   // Recalculate scores
   const allViolations = await ViolationEvent.find({ sessionId });
   const scoring = calculateFullScore(allViolations);
+  const pendingReviewCount = allViolations.filter((event) => event.decisionStatus === "REVIEW_REQUIRED").length;
 
   session.eventScore = scoring.eventScore;
   session.aiScore = scoring.aiScore;
   session.hybridScore = scoring.hybridScore;
   session.fairnessScore = scoring.fairnessScore;
   session.totalPenalties = scoring.totalPenalties;
-  session.classification = scoring.classification;
-  session.decisionReason = scoring.decisionReason;
+  session.totalViolations = scoring.totalViolations;
+  session.classification = pendingReviewCount > 0 && scoring.classification === "SAFE"
+    ? "ADMIN_REVIEW"
+    : scoring.classification;
+  session.decisionReason = pendingReviewCount > 0
+    ? `${pendingReviewCount} unverified signal(s) need human review; no penalty was applied.`
+    : scoring.decisionReason;
+  session.reviewExplanation = "";
+  session.reviewExplanationGeneratedAt = undefined;
 
   await session.save();
+  violation.riskScoreAfter = scoring.hybridScore;
+  await violation.save();
 
   // Check auto-termination
   const shouldTerminate =
@@ -120,7 +154,11 @@ const logViolation = asyncHandler(async (req, res) => {
     success: true,
     violation,
     currentScore: scoring.hybridScore,
-    classification: scoring.classification,
+    classification: session.classification,
+    decisionStatus: decision.status,
+    decisionReason: decision.reason,
+    riskScoreBefore,
+    riskScoreAfter: scoring.hybridScore,
     fairnessScore: scoring.fairnessScore,
     shouldTerminate,
   };
@@ -132,6 +170,7 @@ const logViolation = asyncHandler(async (req, res) => {
         session: {
            id: session._id,
            status: session.status,
+           decisionReason: session.decisionReason,
            studentId: session.studentId,
            examId: session.examId,
            totalViolations: session.totalViolations,
@@ -141,6 +180,74 @@ const logViolation = asyncHandler(async (req, res) => {
   }
 
   res.status(201).json(payload);
+});
+
+const reviewProctoringEvent = asyncHandler(async (req, res) => {
+  const { status, reason } = req.body;
+  const allowedStatuses = new Set(["SAFE", "WARNING", "REVIEW_REQUIRED", "VIOLATION_CONFIRMED"]);
+  if (!allowedStatuses.has(status)) {
+    res.status(400);
+    throw new Error("A valid review status is required");
+  }
+  if (!["teacher", "admin"].includes(req.user?.role)) {
+    res.status(403);
+    throw new Error("Only a teacher or admin may review proctoring events");
+  }
+
+  const event = await ViolationEvent.findOne({ eventId: req.params.eventId });
+  if (!event || !["REVIEW_REQUIRED", "WARNING"].includes(event.decisionStatus)) {
+    res.status(404);
+    throw new Error("Reviewable proctoring event not found");
+  }
+  const [session, exam] = await Promise.all([
+    ExamSession.findById(event.sessionId),
+    Exam.findOne({ examId: event.examId }).select("createdBy"),
+  ]);
+  if (!session) {
+    res.status(404);
+    throw new Error("Exam session not found");
+  }
+  if (req.user.role === "teacher" && exam?.createdBy && exam.createdBy.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("You cannot review events for another teacher's exam");
+  }
+
+  const riskScoreBefore = session.hybridScore || 0;
+  event.decisionStatus = status;
+  event.decisionReason = String(reason || "").slice(0, 1000)
+    || (status === "VIOLATION_CONFIRMED" ? "Confirmed by an authorized reviewer." : "Reviewed; no cheating penalty applied.");
+  event.penaltyPoints = status === "VIOLATION_CONFIRMED"
+    ? (PROCTORING_CONFIG.penalties[event.eventType] || 0)
+    : 0;
+  event.reviewedBy = req.user._id;
+  event.reviewedAt = new Date();
+  event.riskScoreBefore = riskScoreBefore;
+  await event.save();
+
+  const events = await ViolationEvent.find({ sessionId: session._id });
+  const scoring = calculateFullScore(events);
+  const pendingCount = events.filter((item) => item.decisionStatus === "REVIEW_REQUIRED").length;
+  session.eventScore = scoring.eventScore;
+  session.aiScore = scoring.aiScore;
+  session.hybridScore = scoring.hybridScore;
+  session.fairnessScore = scoring.fairnessScore;
+  session.totalPenalties = scoring.totalPenalties;
+  session.totalViolations = scoring.totalViolations;
+  if (session.status !== "TERMINATED") {
+    session.classification = pendingCount > 0 && scoring.classification === "SAFE"
+      ? "ADMIN_REVIEW"
+      : scoring.classification;
+    session.decisionReason = pendingCount > 0
+      ? `${pendingCount} unverified signal(s) need human review; no penalty was applied.`
+      : event.decisionReason;
+  }
+  session.reviewExplanation = "";
+  session.reviewExplanationGeneratedAt = undefined;
+  await session.save();
+  event.riskScoreAfter = scoring.hybridScore;
+  await event.save();
+
+  res.status(200).json({ success: true, event, session, scoring });
 });
 
 // @desc    Log evidence (screenshot URL) for a violation
@@ -312,10 +419,15 @@ const getSessionReport = asyncHandler(async (req, res) => {
 
   // Violation type summary
   const violationsByType = {};
+  const signalsByDecision = {};
   const violationsBySeverity = { LOW: 0, MEDIUM: 0, HIGH: 0, CRITICAL: 0 };
 
   for (const v of violations) {
-    violationsByType[v.eventType] = (violationsByType[v.eventType] || 0) + 1;
+    const decisionStatus = v.decisionStatus || (v.penaltyPoints > 0 ? "VIOLATION_CONFIRMED" : "WARNING");
+    signalsByDecision[decisionStatus] = (signalsByDecision[decisionStatus] || 0) + 1;
+    if (isConfirmedViolation(v)) {
+      violationsByType[v.eventType] = (violationsByType[v.eventType] || 0) + 1;
+    }
     violationsBySeverity[v.severity] =
       (violationsBySeverity[v.severity] || 0) + 1;
   }
@@ -330,6 +442,40 @@ const getSessionReport = asyncHandler(async (req, res) => {
       severity: v.severity,
     }));
 
+  const explanationFacts = {
+    sessionStatus: session.status,
+    terminationReason: session.terminationReason || "",
+    classification: session.classification,
+    decisionReason: session.decisionReason,
+    score: session.hybridScore,
+    penalties: session.totalPenalties,
+    examRules: { roughPaperAllowed: exam?.settings?.roughPaperAllowed !== false },
+    events: violations.map((event) => ({
+      type: event.eventType,
+      timestamp: event.timestamp,
+      camera: event.metadata?.cameraSource || "unknown",
+      confidence: event.confidence,
+      decision: event.decisionStatus || (event.penaltyPoints > 0 ? "VIOLATION_CONFIRMED" : "WARNING"),
+      reason: event.decisionReason || "Legacy event; no reviewer decision was stored.",
+      penaltyPoints: event.penaltyPoints || 0,
+      evidenceAvailable: Boolean(event.evidencePath),
+    })),
+  };
+  if (!session.reviewExplanation && violations.length) {
+    try {
+      const { explainProctoringReview } = await import("../services/groqService.js");
+      session.reviewExplanation = await explainProctoringReview(explanationFacts);
+      if (session.reviewExplanation) {
+        session.reviewExplanationGeneratedAt = new Date();
+        await session.save();
+      }
+    } catch (error) {
+      console.warn("Groq review explanation unavailable; using deterministic summary:", error.message);
+    }
+  }
+  const reviewExplanation = session.reviewExplanation ||
+    `${session.status === "TERMINATED" ? `The exam was terminated: ${session.terminationReason || "no reason was stored"}.` : `Exam status: ${session.status}.`} ${session.totalViolations || 0} confirmed violation(s), ${session.totalPenalties || 0} penalty point(s). ${signalsByDecision.REVIEW_REQUIRED || 0} event(s) require human review. ${session.decisionReason || "No additional decision reason was stored."}`;
+
   res.status(200).json({
     report: {
       student: session.studentId,
@@ -341,6 +487,7 @@ const getSessionReport = asyncHandler(async (req, res) => {
         startTime: session.startTime,
         endTime: session.endTime,
         status: session.status,
+        terminationReason: session.terminationReason || "",
         duration: session.endTime
           ? Math.round(
               (new Date(session.endTime) - new Date(session.startTime)) / 1000
@@ -359,19 +506,29 @@ const getSessionReport = asyncHandler(async (req, res) => {
         hybridScore: session.hybridScore,
         fairnessScore: session.fairnessScore,
         totalPenalties: session.totalPenalties,
-        totalViolations: violations.length,
+        totalViolations: session.totalViolations,
         classification: session.classification,
         decisionReason: session.decisionReason,
       },
       violationsByType,
+      signalsByDecision,
+      reviewExplanation,
       violationsBySeverity,
       violations: violations.map((v) => ({
         eventType: v.eventType,
+        eventId: v.eventId,
         timestamp: v.timestamp,
         severity: v.severity,
         confidence: v.confidence,
         penaltyPoints: v.penaltyPoints,
+        decisionStatus: v.decisionStatus || (v.penaltyPoints > 0 ? "VIOLATION_CONFIRMED" : "WARNING"),
+        decisionReason: v.decisionReason || "Legacy event; no reviewer decision was stored.",
+        riskScoreBefore: v.riskScoreBefore,
+        riskScoreAfter: v.riskScoreAfter,
         description: v.description,
+        metadata: v.metadata,
+        evidencePath: v.evidencePath,
+        evidenceStatus: v.evidenceStatus,
       })),
       evidence,
       generatedAt: new Date(),
@@ -404,6 +561,7 @@ export {
   logViolation,
   logEvidence,
   uploadEvidence,
+  reviewProctoringEvent,
   updateEvidenceStatus,
   getEvidence,
   getSessionViolations,

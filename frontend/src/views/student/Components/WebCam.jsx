@@ -2,17 +2,51 @@
  * WebCam — Laptop webcam component with TF.js COCO-SSD cheating detection.
  * Uses browser-native AI (no Python server needed).
  */
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Webcam from 'react-webcam';
 import { Box, Card } from '@mui/material';
 import useTFJSDetection from '../../../hooks/useTFJSDetection';
 
-export default function WebCam({ webcamRef, onViolation, isActive = true, onCameraError, onCameraReady }) {
+export default function WebCam({ webcamRef, onViolation, isActive = true, onCameraError, onCameraReady, roughPaperAllowed = true }) {
+  const previewMaxHeight = isActive ? 140 : 280;
   const internalWebcamRef = useRef(null);
   const actualWebcamRef = webcamRef || internalWebcamRef;
+  const streamRef = useRef(null);
+  const readyNotifiedRef = useRef(false);
+  const [hasMedia, setHasMedia] = useState(false);
+
+  useEffect(() => {
+    if (!hasMedia) return undefined;
+    let frameId;
+    const checkForUsableFrame = () => {
+      const video = actualWebcamRef.current?.video;
+      if (video?.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+        if (!readyNotifiedRef.current) {
+          readyNotifiedRef.current = true;
+          onCameraReady?.(streamRef.current);
+        }
+        return;
+      }
+      frameId = window.requestAnimationFrame(checkForUsableFrame);
+    };
+    frameId = window.requestAnimationFrame(checkForUsableFrame);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [actualWebcamRef, hasMedia, onCameraReady]);
+
+  const handleUserMedia = (stream) => {
+    streamRef.current = stream;
+    readyNotifiedRef.current = false;
+    setHasMedia(true);
+  };
+
+  const handleUserMediaError = (error) => {
+    setHasMedia(false);
+    readyNotifiedRef.current = false;
+    onCameraError?.(error);
+  };
 
   // TF.js COCO-SSD detection on laptop camera feed
-  useTFJSDetection(actualWebcamRef, onViolation, isActive, 'Laptop Webcam');
+  useTFJSDetection(actualWebcamRef, onViolation, isActive, 'Laptop Webcam', { roughPaperAllowed });
 
   return (
     <Box>
@@ -21,7 +55,8 @@ export default function WebCam({ webcamRef, onViolation, isActive = true, onCame
         sx={{
           position: 'relative',
           width: '100%',
-          height: '100%',
+          maxHeight: previewMaxHeight,
+          aspectRatio: '16 / 9',
           overflow: 'hidden',
           borderRadius: '8px',
           border: isActive ? '2px solid #4caf50' : '2px solid #666',
@@ -29,8 +64,8 @@ export default function WebCam({ webcamRef, onViolation, isActive = true, onCame
       >
         <Webcam
           ref={actualWebcamRef}
-          onUserMedia={onCameraReady}
-          onUserMediaError={onCameraError}
+          onUserMedia={handleUserMedia}
+          onUserMediaError={handleUserMediaError}
           audio={false}
           muted
           screenshotFormat="image/jpeg"
@@ -41,7 +76,8 @@ export default function WebCam({ webcamRef, onViolation, isActive = true, onCame
           }}
           style={{
             width: '100%',
-            height: '100%',
+            maxHeight: previewMaxHeight,
+            aspectRatio: '16 / 9',
             objectFit: 'cover',
             display: 'block',
           }}

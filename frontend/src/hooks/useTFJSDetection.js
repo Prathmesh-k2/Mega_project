@@ -84,9 +84,16 @@ const EVENT_COOLDOWNS = {
   GAZE_DEVIATION: 15000,
 };
 
-export default function useTFJSDetection(videoRef, onViolation, isActive = true, sourceName = 'Camera') {
+export default function useTFJSDetection(
+  videoRef,
+  onViolation,
+  isActive = true,
+  sourceName = 'Camera',
+  { roughPaperAllowed = true } = {},
+) {
   const lastEventRef = useRef({});
-  const confirmingRef = useRef({ noFace: 0, gaze: 0 });
+  const confirmingRef = useRef({ noFace: 0, multipleFaces: 0, phone: 0, book: 0, gaze: 0 });
+  const reportedRef = useRef(new Set());
   const runningRef = useRef(false);
   const onViolationRef = useRef(onViolation);
 
@@ -103,6 +110,7 @@ export default function useTFJSDetection(videoRef, onViolation, isActive = true,
     onViolationRef.current?.({
       eventId: createEventId(),
       eventType,
+      decisionStatus: eventType === 'CAMERA_UNAVAILABLE' ? 'WARNING' : 'REVIEW_REQUIRED',
       confidence,
       description,
       cameraSource: sourceName.toLowerCase().includes('mobile') ? 'mobile' : 'laptop',
@@ -140,11 +148,12 @@ export default function useTFJSDetection(videoRef, onViolation, isActive = true,
         if (!context) throw new Error('Could not create inference canvas');
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
+        const faceCamera = !sourceName.toLowerCase().includes('mobile');
         const [objects, faces] = await Promise.all([
           getObjectModel().then((model) => (model ? model.detect(canvas) : [])),
-          getFaceModel().then((model) => (
+          faceCamera ? getFaceModel().then((model) => (
             model ? model.detectForVideo(video, performance.now()) : null
-          )),
+          )) : Promise.resolve(null),
         ]);
         if (cancelled) return;
 
@@ -155,15 +164,28 @@ export default function useTFJSDetection(videoRef, onViolation, isActive = true,
 
         if (faceCount !== null) {
           if (faceCount === 0) confirmingRef.current.noFace += 1;
-          else confirmingRef.current.noFace = 0;
-          if (confirmingRef.current.noFace >= P.NO_FACE_STRIKES) {
+          else {
+            confirmingRef.current.noFace = 0;
+            reportedRef.current.delete('NO_FACE_DETECTED');
+          }
+          if (confirmingRef.current.noFace >= P.NO_FACE_STRIKES && !reportedRef.current.has('NO_FACE_DETECTED')) {
+            reportedRef.current.add('NO_FACE_DETECTED');
             trigger('NO_FACE_DETECTED', 0.9, `No face visible on ${sourceName}.`, {
               confirmationFrames: confirmingRef.current.noFace,
             });
           }
-          if (faceCount > 1) {
-            trigger('MULTIPLE_FACES', Math.min(0.99, 0.75 + faceCount * 0.05),
-              `${faceCount} faces detected on ${sourceName}.`, { faceCount });
+          confirmingRef.current.multipleFaces = faceCount > 1
+            ? confirmingRef.current.multipleFaces + 1
+            : 0;
+          if (confirmingRef.current.multipleFaces >= 3) {
+            if (!reportedRef.current.has('MULTIPLE_FACES')) trigger('MULTIPLE_FACES', Math.min(0.99, 0.75 + faceCount * 0.05),
+              `${faceCount} faces persistently detected on ${sourceName}; review is required.`, {
+                faceCount,
+                confirmationFrames: confirmingRef.current.multipleFaces,
+              });
+            reportedRef.current.add('MULTIPLE_FACES');
+          } else {
+            reportedRef.current.delete('MULTIPLE_FACES');
           }
 
           const landmarks = faces?.faceLandmarks?.[0];
@@ -178,35 +200,64 @@ export default function useTFJSDetection(videoRef, onViolation, isActive = true,
             const pitch = (nose.y - eyeMidY) / eyeDistance * 90;
             const deviated = yaw >= P.gaze.ANGLE_THRESHOLD || pitch >= P.gaze.ANGLE_THRESHOLD;
             confirmingRef.current.gaze = deviated ? confirmingRef.current.gaze + 1 : 0;
-            if (confirmingRef.current.gaze >= P.gaze.CONFIRMATION_FRAMES) {
+            if (confirmingRef.current.gaze >= P.gaze.CONFIRMATION_FRAMES && !reportedRef.current.has('GAZE_DEVIATION')) {
+              reportedRef.current.add('GAZE_DEVIATION');
               trigger('GAZE_DEVIATION', 0.75, 'Sustained head direction deviation detected.', {
                 yaw: Math.round(yaw),
                 pitch: Math.round(pitch),
                 confirmationFrames: confirmingRef.current.gaze,
               });
             }
+            if (!deviated) reportedRef.current.delete('GAZE_DEVIATION');
           }
-        } else if (people.length === 0) {
+        } else if (faceCamera && faceCount === null && people.length === 0) {
           confirmingRef.current.noFace += 1;
-          if (confirmingRef.current.noFace >= P.NO_FACE_STRIKES) {
+          if (confirmingRef.current.noFace >= P.NO_FACE_STRIKES && !reportedRef.current.has('NO_FACE_DETECTED')) {
+            reportedRef.current.add('NO_FACE_DETECTED');
             trigger('NO_FACE_DETECTED', 0.8, `No person visible on ${sourceName}.`);
           }
+        } else if (faceCamera && faceCount === null) {
+          confirmingRef.current.noFace = 0;
+          reportedRef.current.delete('NO_FACE_DETECTED');
         }
 
-        const classes = new Set(detected.map((item) => item.class));
         const phone = detected.find((item) => item.class === 'cell phone');
-        if (phone) trigger('CELL_PHONE_DETECTED', phone.score,
-          `Mobile phone detected by ${sourceName}. Phones are prohibited.`);
+        confirmingRef.current.phone = phone ? confirmingRef.current.phone + 1 : 0;
+        if (phone && confirmingRef.current.phone >= 3 && !reportedRef.current.has('CELL_PHONE_DETECTED')) {
+          reportedRef.current.add('CELL_PHONE_DETECTED');
+          trigger('CELL_PHONE_DETECTED', phone.score,
+            `A phone-like object persisted in the ${sourceName} view; verify whether it is an unauthorized device.`, {
+              confirmationFrames: confirmingRef.current.phone,
+              objectClass: 'cell phone',
+              identityVerified: false,
+            });
+        } else if (!phone) {
+          reportedRef.current.delete('CELL_PHONE_DETECTED');
+        }
         const book = detected.find((item) => item.class === 'book');
-        if (book) trigger('BOOK_DETECTED', book.score,
-          `Reference material detected by ${sourceName}.`);
-        if (people.length >= 2 && faceCount === null) {
+        confirmingRef.current.book = book && roughPaperAllowed === false
+          ? confirmingRef.current.book + 1
+          : 0;
+        if (book && roughPaperAllowed === false && confirmingRef.current.book >= 3 && !reportedRef.current.has('BOOK_DETECTED')) {
+          reportedRef.current.add('BOOK_DETECTED');
+          trigger('BOOK_DETECTED', book.score,
+            `Possible paper or printed material persisted in the ${sourceName} view; exam policy requires review.`, {
+              confirmationFrames: confirmingRef.current.book,
+              policy: 'roughPaperAllowed=false',
+              objectClass: 'book',
+            });
+        } else if (!book || roughPaperAllowed !== false) {
+          reportedRef.current.delete('BOOK_DETECTED');
+        }
+        if (faceCamera && people.length >= 2 && faceCount === null && !reportedRef.current.has('MULTIPLE_FACES')) {
+          reportedRef.current.add('MULTIPLE_FACES');
           trigger('MULTIPLE_FACES', Math.min(0.97, 0.75 + people.length * 0.05),
             `${people.length} people detected by ${sourceName}.`);
+        } else if (faceCamera && people.length < 2 && faceCount === null) {
+          reportedRef.current.delete('MULTIPLE_FACES');
         }
-        if (classes.has('laptop') || classes.has('tv') || classes.has('monitor')) {
-          trigger('BOOK_DETECTED', 0.7, `Secondary screen detected by ${sourceName}.`);
-        }
+        // Laptops, monitors, paper, and people can all be normal in the desk view.
+        // The mobile camera only raises a violation for another phone in frame.
       } catch (error) {
         console.error('[Proctoring] Detection error:', error);
       } finally {
@@ -221,5 +272,5 @@ export default function useTFJSDetection(videoRef, onViolation, isActive = true,
       window.clearInterval(intervalId);
       runningRef.current = false;
     };
-  }, [isActive, trigger, videoRef, sourceName]);
+  }, [isActive, trigger, videoRef, sourceName, roughPaperAllowed]);
 }

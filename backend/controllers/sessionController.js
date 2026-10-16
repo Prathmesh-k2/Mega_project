@@ -5,6 +5,7 @@ import Question from "../models/quesModel.js";
 import Result from "../models/resultModel.js";
 import ViolationEvent from "../models/violationEventModel.js";
 import { calculateFullScore } from "../services/ScoringEngine.js";
+import PROCTORING_CONFIG from "../config/proctoring.js";
 
 // @desc    Start a new exam session
 // @route   POST /api/sessions/start
@@ -257,28 +258,71 @@ const terminateSession = asyncHandler(async (req, res) => {
     throw new Error("Session not found");
   }
 
+  if (session.studentId.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("You cannot terminate another student's exam session");
+  }
+
   if (session.status !== "ACTIVE") {
     return res
       .status(200)
       .json({ success: true, message: "Session already ended" });
   }
 
+  // Fullscreen recovery is a warning for the first two exits. The server
+  // verifies the persisted event count before accepting termination.
+  const fullscreenExitCount = await ViolationEvent.countDocuments({
+    sessionId: session._id,
+    eventType: "FULLSCREEN_EXIT",
+  });
+  const fullscreenMaxExits = PROCTORING_CONFIG.termination.FULLSCREEN_MAX_EXITS;
+  if (fullscreenExitCount < fullscreenMaxExits) {
+    res.status(409);
+    throw new Error(`Fullscreen was exited ${fullscreenExitCount} time(s); restore fullscreen. Termination requires ${fullscreenMaxExits} exits.`);
+  }
+
+  const terminationReason = reason || `Exam terminated after ${fullscreenExitCount} fullscreen exits without recovery.`;
+  const claimedSession = await ExamSession.findOneAndUpdate(
+    { _id: session._id, status: "ACTIVE" },
+    { $set: { status: "TERMINATED", endTime: new Date(), terminatedAt: new Date(), terminationReason } },
+    { new: true },
+  );
+  if (!claimedSession) {
+    return res.status(200).json({ success: true, message: "Session already ended" });
+  }
+  Object.assign(session, claimedSession.toObject());
+
+  await ViolationEvent.updateOne(
+    { eventId: `termination:${session._id}` },
+    { $setOnInsert: {
+      eventId: `termination:${session._id}`,
+      sessionId: session._id,
+      studentId: session.studentId,
+      examId: session.examId,
+      eventType: "EXAM_TERMINATED",
+      severity: "HIGH",
+      confidence: 1,
+      penaltyPoints: 0,
+      decisionStatus: "TERMINATED",
+      decisionReason: terminationReason,
+      description: terminationReason,
+      metadata: { source: "fullscreen-policy", cameraSource: "browser" },
+    } },
+    { upsert: true },
+  );
+
   // Calculate final scores
   const violations = await ViolationEvent.find({ sessionId: session._id });
   const scoring = calculateFullScore(violations);
 
-  session.status = "TERMINATED";
-  session.endTime = new Date();
-  session.terminatedAt = new Date();
-  session.terminationReason = reason || "Malpractice threshold exceeded";
   session.eventScore = scoring.eventScore;
   session.aiScore = scoring.aiScore;
   session.hybridScore = scoring.hybridScore;
   session.fairnessScore = scoring.fairnessScore;
   session.totalPenalties = scoring.totalPenalties;
-  session.totalViolations = violations.length;
+  session.totalViolations = scoring.totalViolations;
   session.classification = "MALPRACTICE";
-  session.decisionReason = reason || "Automatic termination due to malpractice";
+  session.decisionReason = terminationReason;
   await session.save();
 
   // Also save as result

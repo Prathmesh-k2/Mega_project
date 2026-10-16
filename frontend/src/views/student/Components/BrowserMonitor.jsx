@@ -21,11 +21,12 @@ const createEventId = () => (
 export default function BrowserMonitor({
   onViolation,
   isActive,
+  initialFullscreenExitCount = 0,
   onFullscreenExit,
   onFullscreenRestored,
 }) {
   const lastEventTime = useRef({});
-  const fullscreenExitCount = useRef(0);
+  const fullscreenExitCount = useRef(initialFullscreenExitCount);
 
   const throttle = useCallback((eventType) => {
     const now = Date.now();
@@ -37,9 +38,9 @@ export default function BrowserMonitor({
   }, []);
 
   const emit = useCallback(
-    (eventType, metadata = {}) => {
+    (eventType, metadata = {}, force = false) => {
       if (!isActive) return;
-      if (!throttle(eventType)) return;
+      if (!force && !throttle(eventType)) return;
       onViolation({
         eventId: createEventId(),
         eventType,
@@ -78,7 +79,7 @@ export default function BrowserMonitor({
           exitedAt: new Date().toISOString(),
           exitNumber: count,
           maxAllowed: MAX_FULLSCREEN_EXITS,
-        });
+        }, true);
 
         onFullscreenExit?.(count);
       } else if (isFullscreen) {

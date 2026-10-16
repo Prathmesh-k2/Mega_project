@@ -2,6 +2,7 @@ import express from "express";
 import { protect } from "../middleware/authMiddleware.js";
 import {
   logViolation,
+  reviewProctoringEvent,
   logEvidence,
   getSessionViolations,
   getSessionReport,
@@ -30,6 +31,7 @@ proctoringRoutes.use(protect);
 
 // Student — log violations during exam
 proctoringRoutes.post("/events", logViolation);
+proctoringRoutes.patch("/events/:eventId/review", reviewProctoringEvent);
 proctoringRoutes.post("/evidence", logEvidence);
 proctoringRoutes.post("/evidence/upload", evidenceUpload.single("evidence"), uploadEvidence);
 proctoringRoutes.patch("/evidence/status", updateEvidenceStatus);

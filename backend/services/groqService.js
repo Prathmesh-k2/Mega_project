@@ -134,3 +134,28 @@ export async function groqCompletionWithRetry(systemPrompt, userPrompt, expected
     }
   }
 }
+
+/** Generate a bounded reviewer narrative from backend-verified records only. */
+export async function explainProctoringReview(reportFacts) {
+  if (!process.env.GROQ_API_KEY) return "";
+  const response = await fetch(GROQ_API_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "qwen/qwen3.8-27b",
+      messages: [
+        { role: "system", content: "Write a concise, neutral exam-review explanation using only the supplied JSON facts. Do not infer cheating, invent details, timestamps, confidence, or evidence. Explain the stored policy decisions and score. Clearly distinguish warning, review required, confirmed violations, and actual termination. State that uncertain events did not receive penalties. Return plain text only." },
+        { role: "user", content: JSON.stringify(reportFacts) },
+      ],
+      temperature: 0.1,
+      max_tokens: 300,
+    }),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) throw new Error(`Groq review explanation failed (${response.status})`);
+  const data = await response.json();
+  return String(data.choices?.[0]?.message?.content || "").trim().slice(0, 2000);
+}

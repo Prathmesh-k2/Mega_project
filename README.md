@@ -261,14 +261,11 @@ npm install
 npm install --prefix frontend
 ```
 
-Install the AI service dependencies:
+Install the AI service dependencies into the root virtual environment:
 
 ```powershell
-cd backend-ai
 py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-cd ..
+& ".\.venv\Scripts\python.exe" -m pip install -r ".\backend-ai\requirements.txt"
 ```
 
 If PowerShell blocks environment activation, run
@@ -283,7 +280,7 @@ installed as a service, use:
 net start MongoDB
 ```
 
-### Terminal 1: Node backend and React frontend
+### Terminal 1: all development services
 
 From the repository root:
 
@@ -291,17 +288,8 @@ From the repository root:
 npm run dev
 ```
 
-This starts the Node.js backend on `http://localhost:5000` and the React
-frontend on `http://localhost:3000`.
-
-### Terminal 2: Python AI service
-
-Keep the first terminal running and open a second one:
-
-```powershell
-cd backend-ai
-& ".\.venv\Scripts\python.exe" -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
+This starts the Node.js backend, React frontend, Python AI service, and the
+configured ngrok tunnel together. The AI service uses the root `.venv`.
 
 The AI service runs on `http://localhost:8000`. Verify it at
 `http://localhost:8000/health`.
@@ -337,9 +325,10 @@ Run these commands from the repository root:
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Start the Node backend and React frontend |
+| `npm run dev` | Start the Node backend, React frontend, AI service, and ngrok tunnel |
 | `npm run server` | Start only the Node backend with nodemon |
 | `npm run client` | Start only the React frontend |
+| `npm run ai` | Start only the Python AI service |
 | `npm run dev:tunnel` | Start the development services with ngrok |
 | `npm run build --prefix frontend` | Create the React production build |
 
@@ -366,7 +355,7 @@ If the AI service reports `No module named uvicorn`, install its dependencies
 using the same Python executable that starts the service:
 
 ```powershell
-& ".\backend-ai\.venv\Scripts\python.exe" -m pip install -r ".\backend-ai\requirements.txt"
+& ".\.venv\Scripts\python.exe" -m pip install -r ".\backend-ai\requirements.txt"
 ```
 
 ## GitHub Upload

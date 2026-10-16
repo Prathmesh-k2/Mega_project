@@ -16,23 +16,47 @@ let globalContext = {
   pc: null,
   token: "",
   mobileConnected: false,
+  mobileVideoReady: false,
   status: "Connect your secondary mobile camera",
   stream: null,
   candidateQueue: [],
   notify: () => {}
 };
 
-export default function ExamCameraSetup({ sessionId, isSetupComplete, onSetupSuccess, onViolation, mobileVideoRef }) {
+export default function ExamCameraSetup({ sessionId, isSetupComplete, onSetupSuccess, onViolation, mobileVideoRef, laptopCameraReady = true, roughPaperAllowed = true }) {
   const [, forceRender] = useState({});
+  const [countdown, setCountdown] = useState(null);
+  const onSetupSuccessRef = useRef(onSetupSuccess);
   const internalVideoRef = useRef(null);
   const videoRef = mobileVideoRef || internalVideoRef;
+
+  useEffect(() => {
+    onSetupSuccessRef.current = onSetupSuccess;
+  }, [onSetupSuccess]);
+
+  useEffect(() => {
+    if (countdown === null) return undefined;
+    if (countdown === 0) {
+      onSetupSuccessRef.current?.();
+      setCountdown(null);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setCountdown((remaining) => remaining - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [countdown]);
+
+  useEffect(() => {
+    if (countdown !== null && (!globalContext.mobileConnected || !globalContext.mobileVideoReady || !laptopCameraReady)) {
+      setCountdown(null);
+    }
+  }, [countdown, laptopCameraReady, globalContext.mobileConnected, globalContext.mobileVideoReady]);
 
   // Default violation handler maps to our custom DOM event if not provided
   const handleViolation = onViolation || ((v) => { window.dispatchEvent(new CustomEvent('exam-violation', { detail: v })); });
 
   // Initialize unified 1 FPS background AI cheating detection for Mobile Feeds
   // We only run this detection during the active exam phase (`isSetupComplete === true`)
-  useTFJSDetection(videoRef, handleViolation, isSetupComplete && globalContext.mobileConnected, 'Mobile Desk Camera');
+  useTFJSDetection(videoRef, handleViolation, isSetupComplete && globalContext.mobileConnected, 'Mobile Workspace Camera', { roughPaperAllowed });
 
   useEffect(() => {
     // Bind the global updater to this specific mounted instance
@@ -57,6 +81,7 @@ export default function ExamCameraSetup({ sessionId, isSetupComplete, onSetupSuc
 
         pc.ontrack = (event) => {
           globalContext.stream = event.streams[0];
+          globalContext.mobileVideoReady = false;
           if (videoRef.current) {
             videoRef.current.srcObject = globalContext.stream;
           }
@@ -75,6 +100,7 @@ export default function ExamCameraSetup({ sessionId, isSetupComplete, onSetupSuc
         pc.onconnectionstatechange = () => {
           const connected = pc.connectionState === "connected";
           globalContext.mobileConnected = connected;
+          if (!connected) globalContext.mobileVideoReady = false;
           globalContext.status = connected
             ? "Secondary Mobile Camera Connected"
             : `Mobile video connecting... (${pc.connectionState})`;
@@ -178,15 +204,27 @@ export default function ExamCameraSetup({ sessionId, isSetupComplete, onSetupSuc
   if (isSetupComplete) {
     return (
       <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <Typography variant="caption" color="primary" gutterBottom><b>Mobile Camera Feed</b></Typography>
+        <Typography variant="caption" color="primary" gutterBottom><b>Workspace Camera</b></Typography>
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          style={{ width: "100%", borderRadius: '8px', border: globalContext.mobileConnected ? '2px solid #4CAF50' : '2px solid #f44336' }}
+          onCanPlay={() => {
+            globalContext.mobileVideoReady = true;
+            globalContext.notify();
+          }}
+          onWaiting={() => {
+            globalContext.mobileVideoReady = false;
+            globalContext.notify();
+          }}
+          style={{ width: "100%", maxHeight: 140, aspectRatio: '16 / 9', objectFit: 'cover', borderRadius: '8px', border: globalContext.mobileConnected ? '2px solid #4CAF50' : '2px solid #f44336' }}
         />
         {!globalContext.mobileConnected && <Typography variant="caption" color="error">Reconnecting...</Typography>}
+        {globalContext.mobileConnected && !globalContext.mobileVideoReady && <Typography variant="caption" color="warning.main" display="block">Connected; waiting for camera frames…</Typography>}
+        <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 1 }}>
+          Face, hands, laptop, keyboard, mouse, and normal movement are allowed. {roughPaperAllowed ? 'Rough paper and notebooks are allowed.' : 'Possible paper or notebooks are sent for review, never auto-penalized.'} A phone-like object requires review because the camera cannot identify the device.
+        </Typography>
       </Box>
     );
   }
@@ -212,6 +250,14 @@ export default function ExamCameraSetup({ sessionId, isSetupComplete, onSetupSuc
           autoPlay
           playsInline
           muted
+          onCanPlay={() => {
+            globalContext.mobileVideoReady = true;
+            globalContext.notify();
+          }}
+          onWaiting={() => {
+            globalContext.mobileVideoReady = false;
+            globalContext.notify();
+          }}
           style={{ width: "100%", maxWidth: 480 }}
         />
       </Box>
@@ -219,16 +265,27 @@ export default function ExamCameraSetup({ sessionId, isSetupComplete, onSetupSuc
       <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 2, color: globalContext.mobileConnected ? 'success.main' : 'warning.main' }}>
         Status: {globalContext.status}
       </Typography>
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        The workspace camera may show your face/profile, hands, laptop, keyboard, mouse, pen, and normal movement. {roughPaperAllowed ? 'Rough paper and notebooks are allowed by this exam.' : 'Possible paper or notebooks require human review, not automatic penalties.'} Phone-like objects are recorded for human verification.
+      </Typography>
 
       <Button
         variant="contained"
         color="primary"
         size="large"
         fullWidth
-        disabled={!globalContext.mobileConnected}
-        onClick={() => onSetupSuccess?.()}
+        disabled={!globalContext.mobileConnected || !globalContext.mobileVideoReady || !laptopCameraReady || countdown !== null}
+        onClick={() => setCountdown(20)}
       >
-        {globalContext.mobileConnected ? "Start Exam Now" : "Waiting for Mobile Camera..."}
+        {countdown !== null
+          ? `Exam starts in ${countdown} seconds`
+          : !laptopCameraReady
+            ? 'Waiting for laptop camera…'
+            : globalContext.mobileConnected && !globalContext.mobileVideoReady
+              ? 'Waiting for usable mobile camera frames…'
+            : globalContext.mobileConnected
+              ? 'Run final check (20 seconds)'
+              : 'Waiting for mobile camera…'}
       </Button>
     </Card>
   );

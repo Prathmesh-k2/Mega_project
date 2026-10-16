@@ -10,32 +10,26 @@ const SidebarItems = () => {
   const { userInfo } = useSelector((state) => state.auth);
   const { pathname } = useLocation();
   const pathDirect = pathname;
+  const isStudent = userInfo?.role === 'student';
+  const isAdmin = userInfo?.role === 'admin';
+  const studentLinks = new Set(['/dashboard', '/exam', '/result', '/user/account']);
+  const studentSections = new Set(['Home', 'Student']);
+  const adminSections = new Set(['Monitoring & Analytics']);
 
   return (
     <Box sx={{ px: 3 }}>
       <List sx={{ pt: 0 }} className="sidebarNav">
         {Menuitems.map((item) => {
-          // Check if the user is a student and if the item should be hidden
-          if (
-            userInfo?.role === 'student' &&
-            ['Create Exam', 'Exam Logs', 'User Approvals'].includes(item.title)
-          ) {
-            return null; // Don't render this menu item for students
-          }
-          // {/********SubHeader**********/}
-          if (item.subheader) {
-            // Check if the user is a student and if the subheader should be hidden
-            if (userInfo?.role === 'student' && item.subheader === 'Teacher') {
-              return null; // Don't render the "Teacher" subheader for students
-            }
+          if (isStudent && item.href && !studentLinks.has(item.href)) return null;
+          if (isStudent && item.navlabel && !studentSections.has(item.subheader)) return null;
+          if (isAdmin && item.href && item.href !== '/admin-dashboard') return null;
+          if (isAdmin && item.navlabel && !adminSections.has(item.subheader)) return null;
 
+          if (item.navlabel) {
             return <NavGroup item={item} key={item.subheader} />;
-
-            // {/********If Sub Menu**********/}
-            /* eslint no-else-return: "off" */
-          } else {
-            return <NavItem item={item} key={item.id} pathDirect={pathDirect} />;
           }
+
+          return <NavItem item={item} key={item.id} pathDirect={pathDirect} />;
         })}
       </List>
     </Box>

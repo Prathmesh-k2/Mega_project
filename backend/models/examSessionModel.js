@@ -98,6 +98,8 @@ const examSessionSchema = new mongoose.Schema(
     terminationReason: {
       type: String,
     },
+    reviewExplanation: { type: String, default: "" },
+    reviewExplanationGeneratedAt: { type: Date },
   },
   {
     timestamps: true,

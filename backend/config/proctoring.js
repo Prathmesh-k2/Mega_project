@@ -18,6 +18,7 @@ const PROCTORING_CONFIG = {
     GAZE_DEVIATION:       12,
     BACKGROUND_NOISE:     5,
     SPEECH_DETECTED:      20,
+    CAMERA_UNAVAILABLE:   0,
     COPY_PASTE:           10,
     RIGHT_CLICK:          5,
     KEYBOARD_SHORTCUT:    10,
@@ -38,6 +39,7 @@ const PROCTORING_CONFIG = {
     GAZE_DEVIATION:       'LOW',
     BACKGROUND_NOISE:     'LOW',
     SPEECH_DETECTED:      'MEDIUM',
+    CAMERA_UNAVAILABLE:   'LOW',
     COPY_PASTE:           'MEDIUM',
     RIGHT_CLICK:          'LOW',
     KEYBOARD_SHORTCUT:    'MEDIUM',
@@ -98,6 +100,7 @@ const PROCTORING_CONFIG = {
     // rules (such as repeated fullscreen exits) should terminate client-side.
     ENABLED:              false,
     SCORE_THRESHOLD:      70,
+    FULLSCREEN_MAX_EXITS: 3,
   },
 
   // ── OTP Config ────────────────────────────────────────────────────────────

@@ -9,9 +9,8 @@ import {
   IconPlayerPlayFilled,
   IconUserCheck,
   IconChartBar,
-  IconEye,
   IconDeviceDesktopAnalytics
-  ,IconUsers
+  ,IconUsers,
 } from '@tabler/icons-react';
 
 import { uniqueId } from 'lodash';
@@ -45,6 +44,12 @@ const Menuitems = [
     href: '/result',
   },
   {
+    id: uniqueId(),
+    title: 'Update Password',
+    icon: IconLogin,
+    href: '/user/account',
+  },
+  {
     navlabel: true,
     subheader: 'Teacher',
   },
@@ -75,12 +80,6 @@ const Menuitems = [
     title: 'Admin Dashboard',
     icon: IconDeviceDesktopAnalytics,
     href: '/admin-dashboard',
-  },
-  {
-    id: uniqueId(),
-    title: 'Live Monitoring',
-    icon: IconEye,
-    href: '/live-monitoring',
   },
   {
     id: uniqueId(),

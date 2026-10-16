@@ -7,7 +7,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "server": "nodemon backend/server.js",
     "client": "npm start --prefix frontend",
-    "dev": "concurrently \"npm run server\" \"npm run client\" \"ngrok http 127.0.0.1:3001 --host-header=\\\"localhost:3001\\\"\"",
+    "dev": "concurrently \"npm run server\" \"npm run client\" \"npm run ai\" \"ngrok http 127.0.0.1:3001 --host-header=\\\"localhost:3001\\\"\"",
+    "ai": "\".venv\\Scripts\\python.exe\" -m uvicorn main:app --app-dir backend-ai --host 0.0.0.0 --port 8000 --reload",
 
     "dev:tunnel": "concurrently \"npm run server\" \"npm run client\" \"ngrok http 127.0.0.1:3001 --host-header=\\\"localhost:3001\\\"\""
   },

@@ -59,21 +59,26 @@ const ProctoringReport = () => {
     proctoring,
     violationsByType = {},
     violationsBySeverity = {},
+    reviewExplanation = '',
     violations = [],
     evidence = [],
   } = report;
 
+  const displayedClassification = session?.status === 'TERMINATED'
+    ? 'TERMINATED'
+    : proctoring.classification;
+
   const classColor =
-    proctoring.classification === 'SAFE'
+    displayedClassification === 'SAFE'
       ? 'success'
-      : proctoring.classification === 'WARNING'
+      : displayedClassification === 'WARNING'
         ? 'warning'
         : 'error';
 
   const classIcon =
-    proctoring.classification === 'SAFE' ? (
+    displayedClassification === 'SAFE' ? (
       <SafeIcon sx={{ fontSize: 48 }} color="success" />
-    ) : proctoring.classification === 'WARNING' ? (
+    ) : displayedClassification === 'WARNING' ? (
       <WarningIcon sx={{ fontSize: 48 }} color="warning" />
     ) : (
       <DangerIcon sx={{ fontSize: 48 }} color="error" />
@@ -102,17 +107,24 @@ const ProctoringReport = () => {
               </Grid>
               <Grid item textAlign="right">
                 <Chip
-                  label={proctoring.classification}
+                  label={displayedClassification}
                   color={classColor}
                   sx={{ fontSize: '1rem', fontWeight: 'bold', mb: 1 }}
                 />
                 <Typography variant="body2" color="textSecondary">
-                  {proctoring.decisionReason}
+                  {session?.status === 'TERMINATED' && session?.terminationReason
+                    ? `Termination: ${session.terminationReason}`
+                    : proctoring.decisionReason}
                 </Typography>
               </Grid>
             </Grid>
           </CardContent>
         </Card>
+
+        <Alert severity="info" sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" fontWeight={700}>Review explanation</Typography>
+          {reviewExplanation || proctoring.decisionReason}
+        </Alert>
 
         {/* Score Cards */}
         <Grid container spacing={3} mb={3}>
@@ -258,10 +270,10 @@ const ProctoringReport = () => {
         {/* Violation Breakdown */}
         <Grid container spacing={3} mb={3}>
           <Grid item xs={12} md={6}>
-            <DashboardCard title="Violations by Type">
+            <DashboardCard title="Confirmed incidents by Type">
               {Object.keys(violationsByType).length === 0 ? (
                 <Typography p={2} color="textSecondary">
-                  No violations
+                  No confirmed violations
                 </Typography>
               ) : (
                 <Box p={2}>
@@ -276,7 +288,7 @@ const ProctoringReport = () => {
             </DashboardCard>
           </Grid>
           <Grid item xs={12} md={6}>
-            <DashboardCard title="Violations by Severity">
+            <DashboardCard title="Signals by Severity">
               <Box p={2}>
                 {Object.entries(violationsBySeverity).map(([sev, count]) => (
                   <Box key={sev} display="flex" justifyContent="space-between" mb={1}>
@@ -301,7 +313,7 @@ const ProctoringReport = () => {
         </Grid>
 
         {/* Violation Timeline */}
-        <DashboardCard title="Violation Timeline">
+        <DashboardCard title="Monitoring Signal Timeline">
           <TableContainer component={Paper} sx={{ maxHeight: 400 }}>
             <Table size="small" stickyHeader>
               <TableHead>
@@ -309,7 +321,8 @@ const ProctoringReport = () => {
                   <TableCell>#</TableCell>
                   <TableCell>Time</TableCell>
                   <TableCell>Event</TableCell>
-                  <TableCell>Severity</TableCell>
+                  <TableCell>Decision</TableCell>
+                  <TableCell>Reason</TableCell>
                   <TableCell>Confidence</TableCell>
                   <TableCell>Penalty</TableCell>
                 </TableRow>
@@ -317,8 +330,8 @@ const ProctoringReport = () => {
               <TableBody>
                 {violations.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} align="center">
-                      No violations recorded — Clean exam ✅
+                    <TableCell colSpan={7} align="center">
+                      No monitoring signals recorded.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -331,17 +344,20 @@ const ProctoringReport = () => {
                       <TableCell>{v.eventType?.replace(/_/g, ' ')}</TableCell>
                       <TableCell>
                         <Chip
-                          label={v.severity}
+                          label={v.decisionStatus || (v.penaltyPoints > 0 ? 'VIOLATION_CONFIRMED' : 'WARNING')}
                           color={
-                            v.severity === 'HIGH' || v.severity === 'CRITICAL'
+                            v.decisionStatus === 'VIOLATION_CONFIRMED' || (!v.decisionStatus && v.penaltyPoints > 0)
                               ? 'error'
-                              : v.severity === 'MEDIUM'
+                              : v.decisionStatus === 'REVIEW_REQUIRED'
                                 ? 'warning'
-                                : 'success'
+                                : v.decisionStatus === 'WARNING'
+                                  ? 'warning'
+                                  : 'success'
                           }
                           size="small"
                         />
                       </TableCell>
+                      <TableCell>{v.decisionReason || v.description || 'No decision reason stored.'}</TableCell>
                       <TableCell>{((v.confidence || 0) * 100).toFixed(0)}%</TableCell>
                       <TableCell>{v.penaltyPoints || 0}</TableCell>
                     </TableRow>

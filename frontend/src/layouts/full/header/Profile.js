@@ -9,14 +9,13 @@ import {
   MenuItem,
   ListItemIcon,
   ListItemText,
-  Typography,
 } from '@mui/material';
 
-import { IconListCheck, IconMail, IconUser } from '@tabler/icons-react';
+import { IconMail } from '@tabler/icons-react';
 
 import ProfileImg from 'src/assets/images/profile/user-1.jpg';
 
-import { useSelector, useDispatch } from 'react-redux';
+import { useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 
 import { logout } from './../../../slices/authSlice';
@@ -30,8 +29,6 @@ const Profile = () => {
   const handleClose2 = () => {
     setAnchorEl2(null);
   };
-
-  const { userInfo } = useSelector((state) => state.auth);
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -88,21 +85,9 @@ const Profile = () => {
       >
         <MenuItem component={Link} to="/user/account">
           <ListItemIcon>
-            <IconUser width={20} />
-          </ListItemIcon>
-          <ListItemText>My Profile</ListItemText>
-        </MenuItem>
-        <MenuItem component={Link} to="/user/account">
-          <ListItemIcon>
             <IconMail width={20} />
           </ListItemIcon>
           <ListItemText>My Account</ListItemText>
-        </MenuItem>
-        <MenuItem component={Link} to="/user/account">
-          <ListItemIcon>
-            <IconListCheck width={20} />
-          </ListItemIcon>
-          <ListItemText>My Tasks</ListItemText>
         </MenuItem>
         <Box mt={1} py={1} px={2}>
           <Button variant="outlined" color="primary" onClick={logoutHandler} fullWidth>
